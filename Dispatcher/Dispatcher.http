@@ -1,0 +1,6 @@
+@Dispatcher_HostAddress = http://localhost:5045
+
+GET {{Dispatcher_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

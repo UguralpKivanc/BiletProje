@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BiletProje")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+991ba3bf3fa25fe6e4451bb4d1ca0aebab2882c6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6766c675957f271fed785cc4fd0092d4cce273d6")]
 [assembly: System.Reflection.AssemblyProductAttribute("BiletProje")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BiletProje")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
