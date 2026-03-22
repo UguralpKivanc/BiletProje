@@ -1,21 +1,22 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using eventservice.Models; // Modelimizi buraya ekledik
 
-namespace EventService.Controllers
+namespace eventservice.Controllers
 {
     [ApiController]
-    [Route("events")]
+    [Route("api/[controller]")]
     public class EventsController : ControllerBase
     {
-        [HttpGet]
-        public IActionResult GetAll()
+        private static readonly List<Event> Etkinlikler = new List<Event>
         {
-            var eventList = new[]
-            {
-                new { Id = 1, Name = "YazLab Sunumu", Location = "Kocaeli Üni" },
-                new { Id = 2, Name = "Mikroservis Atölyesi", Location = "Laboratuvar A1" }
-            };
+            new Event { Id = 1, Name = "KOÜ Bahar Şenliği", Location = "Umuttepe Kampüsü", Date = DateTime.Now.AddDays(10), Price = 0 },
+            new Event { Id = 2, Name = "Yazılım Konferansı", Location = "Kocaeli Kongre Merkezi", Date = DateTime.Now.AddDays(20), Price = 150.50m }
+        };
 
-            return Ok(eventList);
+        [HttpGet]
+        public IEnumerable<Event> Get()
+        {
+            return Etkinlikler;
         }
     }
 }
