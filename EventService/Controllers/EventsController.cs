@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using eventservice.Models; // Modelimizi buraya ekledik
+using eventservice.Models;
+using MongoDB.Driver; // Bunu eklemeyi unutma (NuGet paketini kurduysan gelir)
 
 namespace eventservice.Controllers
 {
@@ -7,16 +8,36 @@ namespace eventservice.Controllers
     [Route("api/[controller]")]
     public class EventsController : ControllerBase
     {
-        private static readonly List<Event> Etkinlikler = new List<Event>
-        {
-            new Event { Id = 1, Name = "KOÜ Bahar Şenliği", Location = "Umuttepe Kampüsü", Date = DateTime.Now.AddDays(10), Price = 0 },
-            new Event { Id = 2, Name = "Yazılım Konferansı", Location = "Kocaeli Kongre Merkezi", Date = DateTime.Now.AddDays(20), Price = 150.50m }
-        };
+        // Artık List yerine MongoDB Koleksiyonu kullanıyoruz
+        private readonly IMongoCollection<Event> _eventsCollection;
 
-        [HttpGet]
-        public IEnumerable<Event> Get()
+        public EventsController()
         {
-            return Etkinlikler;
+            // 1. MongoDB'ye bağlan (Varsayılan yerel adres)
+            var client = new MongoClient("mongodb://localhost:27017");
+
+            // 2. Veritabanını seç (Yoksa otomatik oluşturur)
+            var database = client.GetDatabase("BiletSistemiDb");
+
+            // 3. Tabloyu (Collection) seç
+            _eventsCollection = database.GetCollection<Event>("Events");
+        }
+
+        // TÜM ETKİNLİKLERİ GETİR
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Event>>> Get()
+        {
+            // Veritabanındaki tüm belgeleri listele
+            var events = await _eventsCollection.Find(_ => true).ToListAsync();
+            return Ok(events);
+        }
+
+        // YENİ ETKİNLİK EKLE (Test etmek için lazım olacak)
+        [HttpPost]
+        public async Task<IActionResult> Create(Event newEvent)
+        {
+            await _eventsCollection.InsertOneAsync(newEvent);
+            return Ok(newEvent);
         }
     }
 }
