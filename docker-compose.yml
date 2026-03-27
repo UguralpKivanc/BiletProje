@@ -1,0 +1,64 @@
+version: '3.4'
+
+services:
+  # 1. Veritabanı (MongoDB)
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_container
+    ports:
+      - "27017:27017"
+    networks:
+      - bilet_network
+
+  # 2. Ana Giriş Kapısı (Dispatcher)
+  dispatcher:
+    build:
+      context: ./Dispatcher
+      dockerfile: Dockerfile
+    container_name: dispatcher_container
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - DOCKER_ENV=true
+    depends_on:
+      - event-service
+      - ticket-service
+    networks:
+      - bilet_network
+
+  # 3. Etkinlik Servisi
+  event-service:
+    build:
+      context: ./EventService
+      dockerfile: Dockerfile
+    container_name: event_service_container
+    ports:
+      - "5001:5001"
+    environment:
+      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
+      - ASPNETCORE_URLS=http://+:5001
+    depends_on:
+      - mongodb
+    networks:
+      - bilet_network
+
+  # 4. Bilet Servisi
+  ticket-service:
+    build:
+      context: ./TicketService
+      dockerfile: Dockerfile
+    container_name: ticket_service_container
+    ports:
+      - "5168:5168"
+    environment:
+      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
+      - ASPNETCORE_URLS=http://+:5168
+    depends_on:
+      - mongodb
+    networks:
+      - bilet_network
+
+networks:
+  bilet_network:
+    driver: bridge

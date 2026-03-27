@@ -13,22 +13,26 @@ namespace Dispatcher.Controllers
         [HttpGet("{*path}")]
         public async Task<IActionResult> ForwardToService(string path)
         {
-            // 1. Yol kontrolü (boşsa hata ver)
+            // 1. Yol kontrolü
             if (string.IsNullOrEmpty(path))
             {
                 return NotFound("Lutfen bir yol belirtin (ornegin: gateway/events)");
             }
 
-            // 2. Port Yönlendirme Mantığı
-            // Eğer adres 'events' içeriyorsa 5001'e, içermiyorsa 5168'e (TicketService) yönlendir.
+            // 2. Docker mı yoksa Yerel mi kontrolü
+            // docker-compose dosyasında DOCKER_ENV=true verdiğimiz için bunu anlayabiliyor
+            bool isDocker = Environment.GetEnvironmentVariable("DOCKER_ENV") == "true";
+
+            // 3. Port ve Servis İsmi Yönlendirme Mantığı
             string targetUrl;
             if (path.Contains("events"))
             {
-                targetUrl = "http://localhost:5001/api/events";
+                // Docker içindeysek konteyner ismi (event-service), değilse localhost
+                targetUrl = isDocker ? "http://event-service:5001/api/events" : "http://localhost:5001/api/events";
             }
             else if (path.Contains("tickets"))
             {
-                targetUrl = "http://localhost:5168/api/tickets";
+                targetUrl = isDocker ? "http://ticket-service:5168/api/tickets" : "http://localhost:5168/api/tickets";
             }
             else
             {
@@ -37,13 +41,12 @@ namespace Dispatcher.Controllers
 
             try
             {
-                // 3. Mikroservise isteği at ve cevabı bekle
+                // 4. Mikroservise isteği at ve cevabı bekle
                 var response = await _httpClient.GetAsync(targetUrl);
 
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    // Gelen veriyi JSON formatında kullanıcıya yansıt
                     return Content(content, "application/json");
                 }
 
@@ -51,8 +54,8 @@ namespace Dispatcher.Controllers
             }
             catch (Exception ex)
             {
-                // Eğer hedef servis (5001 veya 5168) kapalıysa buraya düşer
-                return StatusCode(503, $"Hedef mikroservis su an ulasilamaz durumda: {ex.Message}");
+                // Hata mesajını daha açıklayıcı yaptık (Docker hatasını anlamak için)
+                return StatusCode(503, $"Hedef mikroservis su an ulasilamaz durumda ({targetUrl}): {ex.Message}");
             }
         }
     }
