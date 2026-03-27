@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace Dispatcher.Controllers
 {
     [ApiController]
-    [Route("gateway")]
+    [Route("gateway")] // Giriş kapımız: http://localhost:5000/gateway
     public class GatewayController : ControllerBase
     {
         private readonly HttpClient _httpClient = new HttpClient();
@@ -13,36 +13,46 @@ namespace Dispatcher.Controllers
         [HttpGet("{*path}")]
         public async Task<IActionResult> ForwardToService(string path)
         {
-            // İster 3.1: Boş veya geçersiz yol kontrolü
-            if (string.IsNullOrEmpty(path) || path.Contains("invalid-path"))
+            // 1. Yol kontrolü (boşsa hata ver)
+            if (string.IsNullOrEmpty(path))
             {
-                return NotFound();
+                return NotFound("Lutfen bir yol belirtin (ornegin: gateway/events)");
             }
 
-            // İster 3.1: URL yapısına göre ilgili mikroservis portuna yönlendirme
-            string targetUrl = path.Contains("events")
-                ? "http://localhost:5001/api/events"
-                : "http://localhost:5002/api/tickets";
+            // 2. Port Yönlendirme Mantığı
+            // Eğer adres 'events' içeriyorsa 5001'e, içermiyorsa 5168'e (TicketService) yönlendir.
+            string targetUrl;
+            if (path.Contains("events"))
+            {
+                targetUrl = "http://localhost:5001/api/events";
+            }
+            else if (path.Contains("tickets"))
+            {
+                targetUrl = "http://localhost:5168/api/tickets";
+            }
+            else
+            {
+                return BadRequest("Gecersiz servis yolu. Sadece 'events' veya 'tickets' kullanilabilir.");
+            }
 
             try
             {
-                // İster 3.2: HttpClient ile servisler arası iletişim
+                // 3. Mikroservise isteği at ve cevabı bekle
                 var response = await _httpClient.GetAsync(targetUrl);
 
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    // İster 3.2: Veri transferi JSON formatında sağlanır
+                    // Gelen veriyi JSON formatında kullanıcıya yansıt
                     return Content(content, "application/json");
                 }
 
-                // İster 3.1: Hatalar için uygun HTTP hata kodları dönülür (4xx, 5xx)
-                return StatusCode((int)response.StatusCode);
+                return StatusCode((int)response.StatusCode, "Mikroservis hata dondu.");
             }
-            catch
+            catch (Exception ex)
             {
-                // Servis kapalıysa veya ulaşılamıyorsa profesyonel hata kodu
-                return StatusCode(503, "Hedef mikroservis su an ulasilamaz durumda.");
+                // Eğer hedef servis (5001 veya 5168) kapalıysa buraya düşer
+                return StatusCode(503, $"Hedef mikroservis su an ulasilamaz durumda: {ex.Message}");
             }
         }
     }
