@@ -1,7 +1,8 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\Dispatcher"
   ],
-  "SelectedNode": "\\TicketService",
+  "SelectedNode": "\\Dispatcher\\GatewayController.cs",
   "PreviewInSolutionExplorer": false
 }

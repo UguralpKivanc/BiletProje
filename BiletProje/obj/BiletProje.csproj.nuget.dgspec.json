@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\mustke\\Desktop\\BiletProje-main (1)\\BiletProje-main\\BiletProje\\BiletProje.csproj": {}
+    "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj": {}
   },
   "projects": {
-    "C:\\Users\\mustke\\Desktop\\BiletProje-main (1)\\BiletProje-main\\BiletProje\\BiletProje.csproj": {
+    "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\mustke\\Desktop\\BiletProje-main (1)\\BiletProje-main\\BiletProje\\BiletProje.csproj",
+        "projectUniqueName": "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj",
         "projectName": "BiletProje",
-        "projectPath": "C:\\Users\\mustke\\Desktop\\BiletProje-main (1)\\BiletProje-main\\BiletProje\\BiletProje.csproj",
+        "projectPath": "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj",
         "packagesPath": "C:\\Users\\mustke\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\mustke\\Desktop\\BiletProje-main (1)\\BiletProje-main\\BiletProje\\obj\\",
+        "outputPath": "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

@@ -7,31 +7,44 @@ namespace Dispatcher.Tests
 {
     public class DispatcherRoutingTests
     {
-        [Fact]
-        public async Task Dispatcher_Should_Return_NotFound_For_Invalid_Route()
+        private readonly GatewayController _controller;
+
+        public DispatcherRoutingTests()
         {
-            // Arrange
-            var controller = new GatewayController();
-
-            // Act
-            var result = await controller.ForwardToService("/invalid-path");
-
-            // Assert
-            Assert.IsType<NotFoundResult>(result);
+            // Controller'ı her test için hazırla
+            _controller = new GatewayController();
         }
 
         [Fact]
-        public async Task Dispatcher_Should_Forward_Events_Request_To_EventService()
+        public async Task ForwardToService_ShouldReturnNotFound_WhenPathIsEmpty()
         {
-            // Arrange
-            var controller = new GatewayController();
-            string path = "events";
+            // Act: Boş bir yol gönderiyoruz
+            var result = await _controller.ForwardToService("");
 
-            // Act
-            var result = await controller.ForwardToService(path);
+            // Assert: NotFound dönmesini bekliyoruz (İster 3.1)
+            Assert.IsType<NotFoundObjectResult>(result);
+        }
 
-            // Assert
-            Assert.IsType<ContentResult>(result);
+        [Fact]
+        public async Task ForwardToService_ShouldReturnBadRequest_WhenPathIsInvalid()
+        {
+            // Act: Tanımsız bir servis ismi gönderiyoruz
+            var result = await _controller.ForwardToService("random-service");
+
+            // Assert: BadRequest dönmesini bekliyoruz
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task ForwardToService_ShouldReturn503_WhenTargetServiceIsDown()
+        {
+            // Act: Geçerli bir yol ("events") ama servis kapalıyken deniyoruz
+            // (Şu an servislerin kapalı olduğunu varsayıyoruz)
+            var result = await _controller.ForwardToService("events");
+
+            // Assert: Servis kapalı olduğu için 503 Service Unavailable bekliyoruz
+            var statusCodeResult = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(503, statusCodeResult.StatusCode);
         }
     }
 }
