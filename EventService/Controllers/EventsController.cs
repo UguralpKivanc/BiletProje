@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using eventservice.Models;
-using MongoDB.Driver; // Bunu eklemeyi unutma (NuGet paketini kurduysan gelir)
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace eventservice.Controllers
 {
@@ -8,36 +8,32 @@ namespace eventservice.Controllers
     [Route("api/[controller]")]
     public class EventsController : ControllerBase
     {
-        // Artık List yerine MongoDB Koleksiyonu kullanıyoruz
-        private readonly IMongoCollection<Event> _eventsCollection;
+        private readonly IMongoCollection<BsonDocument> _eventsCollection;
 
-        public EventsController()
+        public EventsController(IConfiguration configuration)
         {
-            // 1. MongoDB'ye bağlan (Varsayılan yerel adres)
-            var client = new MongoClient("mongodb://localhost:27017");
+            // Ortam değişkenini kontrol et, yoksa Docker içindeki servis adını kullan
+            var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__MongoDb")
+                                   ?? "mongodb://mongodb:27017";
 
-            // 2. Veritabanını seç (Yoksa otomatik oluşturur)
+            var client = new MongoClient(connectionString);
             var database = client.GetDatabase("BiletSistemiDb");
 
-            // 3. Tabloyu (Collection) seç
-            _eventsCollection = database.GetCollection<Event>("Events");
+            // BsonDocument kullanarak her türlü veri yapısına uyum sağlıyoruz
+            _eventsCollection = database.GetCollection<BsonDocument>("Events");
         }
 
-        // TÜM ETKİNLİKLERİ GETİR
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Event>>> Get()
+        public async Task<IActionResult> Get()
         {
-            // Veritabanındaki tüm belgeleri listele
-            var events = await _eventsCollection.Find(_ => true).ToListAsync();
-            return Ok(events);
-        }
+            // 1. Veritabanındaki tüm belgeleri çek
+            var documents = await _eventsCollection.Find(new BsonDocument()).ToListAsync();
 
-        // YENİ ETKİNLİK EKLE (Test etmek için lazım olacak)
-        [HttpPost]
-        public async Task<IActionResult> Create(Event newEvent)
-        {
-            await _eventsCollection.InsertOneAsync(newEvent);
-            return Ok(newEvent);
+            // 2. BsonDocument'leri .NET'in anlayacağı bir 'Dictionary' yapısına çeviriyoruz.
+            // Bu sayede o gıcık ters bölü (\") işaretleri kaybolur, tertemiz JSON gelir.
+            var result = documents.Select(doc => BsonTypeMapper.MapToDotNetValue(doc));
+
+            return Ok(result);
         }
     }
 }

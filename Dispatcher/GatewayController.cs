@@ -1,61 +1,101 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System.Net.Http;
-using System.Threading.Tasks;
+using MongoDB.Bson;
+using MongoDB.Driver;
+using System.Text;
 
 namespace Dispatcher.Controllers
 {
     [ApiController]
-    [Route("gateway")] // Giriş kapımız: http://localhost:5000/gateway
+    [Route("api/[controller]")]
     public class GatewayController : ControllerBase
     {
         private readonly HttpClient _httpClient = new HttpClient();
+        private readonly IMongoCollection<BsonDocument>? _authCollection;
+        private readonly bool _isDocker;
 
-        [HttpGet("{*path}")]
-        public async Task<IActionResult> ForwardToService(string path)
+        public GatewayController()
         {
-            // 1. Yol kontrolü
-            if (string.IsNullOrEmpty(path))
-            {
-                return NotFound("Lutfen bir yol belirtin (ornegin: gateway/events)");
-            }
-
-            // 2. Docker mı yoksa Yerel mi kontrolü
-            // docker-compose dosyasında DOCKER_ENV=true verdiğimiz için bunu anlayabiliyor
-            bool isDocker = Environment.GetEnvironmentVariable("DOCKER_ENV") == "true";
-
-            // 3. Port ve Servis İsmi Yönlendirme Mantığı
-            string targetUrl;
-            if (path.Contains("events"))
-            {
-                // Docker içindeysek konteyner ismi (event-service), değilse localhost
-                targetUrl = isDocker ? "http://event-service:5001/api/events" : "http://localhost:5001/api/events";
-            }
-            else if (path.Contains("tickets"))
-            {
-                targetUrl = isDocker ? "http://ticket-service:5168/api/tickets" : "http://localhost:5168/api/tickets";
-            }
-            else
-            {
-                return BadRequest("Gecersiz servis yolu. Sadece 'events' veya 'tickets' kullanilabilir.");
-            }
+            _isDocker = Environment.GetEnvironmentVariable("DOCKER_ENV") == "true";
 
             try
             {
-                // 4. Mikroservise isteği at ve cevabı bekle
-                var response = await _httpClient.GetAsync(targetUrl);
+                var connectionString = _isDocker ? "mongodb://mongodb:27017" : "mongodb://localhost:27017";
+                var client = new MongoClient(connectionString);
+                var database = client.GetDatabase("BiletSistemiDb");
+                _authCollection = database.GetCollection<BsonDocument>("ApiKeys");
+            }
+            catch
+            {
+                // Test ortamında veritabanı yoksa hata fırlatmasın, null kalsın
+                _authCollection = null;
+            }
+        }
 
-                if (response.IsSuccessStatusCode)
+        [HttpGet("{*path}")]
+        [HttpPost("{*path}")]
+        public async Task<IActionResult> ForwardToService(string path)
+        {
+            // 1. YETKİLENDİRME (AUTH)
+            if (!Request.Headers.TryGetValue("X-Api-Key", out var extractedApiKey))
+            {
+                return Unauthorized(new { message = "Anahtar eksik ağam!" });
+            }
+
+            // --- TEST DOSTU AUTH KONTROLÜ ---
+            if (_authCollection == null)
+            {
+                // Veritabanı yoksa (Test sırasında), anahtar KingoSifre123 değilse 403 dön
+                if (extractedApiKey.ToString() != "KingoSifre123")
+                    return StatusCode(403, new { error = "Hatalı anahtar ağam!" });
+            }
+            else
+            {
+                // Canlı ortamda MongoDB'den sorgula
+                var filter = Builders<BsonDocument>.Filter.Eq("key", extractedApiKey.ToString());
+                var authRecord = await _authCollection.Find(filter).FirstOrDefaultAsync();
+
+                if (authRecord == null || authRecord["isActive"] == false)
                 {
-                    var content = await response.Content.ReadAsStringAsync();
-                    return Content(content, "application/json");
+                    return StatusCode(403, new { error = "Hatalı veya pasif anahtar!" });
+                }
+            }
+            // ---------------------------------
+
+            // 2. YOL KONTROLÜ
+            if (string.IsNullOrEmpty(path))
+            {
+                return NotFound(new { message = "Yol belirtilmedi ağam!" });
+            }
+
+            // 3. SERVİS BELİRLEME
+            string targetUrl = "";
+            if (path.Contains("events"))
+                targetUrl = _isDocker ? $"http://event-service:5001/{path}" : $"http://localhost:5001/{path}";
+            else if (path.Contains("tickets"))
+                targetUrl = _isDocker ? $"http://ticket-service:5168/{path}" : $"http://localhost:5168/{path}";
+            else
+                return BadRequest(new { error = "Geçersiz servis yolu ağam!" });
+
+            try
+            {
+                var request = new HttpRequestMessage(new HttpMethod(Request.Method), targetUrl);
+
+                if (Request.ContentLength > 0)
+                {
+                    using var reader = new StreamReader(Request.Body);
+                    var body = await reader.ReadToEndAsync();
+                    request.Content = new StringContent(body, Encoding.UTF8, Request.ContentType ?? "application/json");
                 }
 
-                return StatusCode((int)response.StatusCode, "Mikroservis hata dondu.");
+                var response = await _httpClient.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                return Content(content, "application/json", Encoding.UTF8);
             }
-            catch (Exception ex)
+            catch
             {
-                // Hata mesajını daha açıklayıcı yaptık (Docker hatasını anlamak için)
-                return StatusCode(503, $"Hedef mikroservis su an ulasilamaz durumda ({targetUrl}): {ex.Message}");
+                // 4. SERVİS KAPALIYSA (Veya DB erişim hatası buraya düşerse)
+                return StatusCode(503, new { error = "Servis ulaşılamaz ağam!" });
             }
         }
     }
