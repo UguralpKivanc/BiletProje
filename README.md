@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Proje Adı** | Mikroservis Tabanlı Bilet Satış Sistemi |
-| **Ekip Üyeleri** | TODO |
-| **Tarih** | 2026 |
-| **Üniversite** | TODO |
+| **Ekip Üyeleri** | Yusuf Can Müştekin-231307082,Uğuralp Kıvanç-231307081 |
+| **Tarih** | Mart 2026 |
+| **Üniversite** | Kocaeli Üniversitesi,Bilişim Sistemleri Mühendisliği |
 
 ---
 
