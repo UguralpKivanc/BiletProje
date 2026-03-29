@@ -1,7 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using MongoDB.Bson;
-using MongoDB.Driver;
-using System.Text;
+using Microsoft.AspNetCore.Mvc;
+using TicketService.Models;
+using TicketService.Repositories;
 
 namespace TicketService.Controllers
 {
@@ -9,53 +8,58 @@ namespace TicketService.Controllers
     [Route("api/[controller]")]
     public class TicketsController : ControllerBase
     {
-        private readonly IMongoCollection<BsonDocument> _ticketsCollection;
+        private readonly ITicketRepository _repository;
 
-        public TicketsController(IConfiguration configuration)
+        public TicketsController(ITicketRepository repository)
         {
-            var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__MongoDb")
-                                   ?? "mongodb://mongodb:27017";
-
-            var client = new MongoClient(connectionString);
-            var database = client.GetDatabase("BiletSistemiDb");
-            _ticketsCollection = database.GetCollection<BsonDocument>("Tickets");
+            _repository = repository;
         }
 
+        // GET /api/tickets
         [HttpGet]
         public async Task<IActionResult> Get()
         {
-            var documents = await _ticketsCollection.Find(new BsonDocument()).ToListAsync();
-            var result = documents.Select(doc => BsonTypeMapper.MapToDotNetValue(doc));
-            return Ok(result);
+            var tickets = await _repository.GetAllAsync();
+            return Ok(tickets);
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Post()
+        // GET /api/tickets/{id}
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(string id)
         {
-            // Ağam, burada veriyi sınıfa uydurmaya çalışmıyoruz, 
-            // Direkt gelen paketi (Body) ham metin olarak okuyoruz.
-            using var reader = new StreamReader(Request.Body, Encoding.UTF8);
-            var body = await reader.ReadToEndAsync();
+            var ticket = await _repository.GetByIdAsync(id);
+            if (ticket == null) return NotFound(new { error = "Bilet bulunamadı!" });
+            return Ok(ticket);
+        }
 
-            if (string.IsNullOrEmpty(body))
-            {
+        // POST /api/tickets
+        [HttpPost]
+        public async Task<IActionResult> Post([FromBody] Ticket ticket)
+        {
+            if (ticket == null)
                 return BadRequest("Ağam veri boş geldi, Hadise biletini gönderemedik!");
-            }
+            var created = await _repository.CreateAsync(ticket);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
 
-            try
-            {
-                // Okuduğumuz ham metni (JSON) BsonDocument'e elinle çeviriyoruz
-                var document = BsonDocument.Parse(body);
+        // PUT /api/tickets/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Put(string id, [FromBody] Ticket ticket)
+        {
+            var existing = await _repository.GetByIdAsync(id);
+            if (existing == null) return NotFound(new { error = "Bilet bulunamadı!" });
+            await _repository.UpdateAsync(id, ticket);
+            return NoContent();
+        }
 
-                await _ticketsCollection.InsertOneAsync(document);
-
-                // Başarıyla eklendiğini teyit etmek için eklenen veriyi geri döndür
-                return Ok(BsonTypeMapper.MapToDotNetValue(document));
-            }
-            catch (Exception ex)
-            {
-                return BadRequest("Ağam gönderdiğin JSON bozuk: " + ex.Message);
-            }
+        // DELETE /api/tickets/{id}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(string id)
+        {
+            var existing = await _repository.GetByIdAsync(id);
+            if (existing == null) return NotFound(new { error = "Bilet bulunamadı!" });
+            await _repository.DeleteAsync(id);
+            return NoContent();
         }
     }
 }

@@ -16,7 +16,6 @@ namespace Dispatcher.Controllers
         public GatewayController()
         {
             _isDocker = Environment.GetEnvironmentVariable("DOCKER_ENV") == "true";
-
             try
             {
                 var connectionString = _isDocker ? "mongodb://mongodb:27017" : "mongodb://localhost:27017";
@@ -24,78 +23,64 @@ namespace Dispatcher.Controllers
                 var database = client.GetDatabase("BiletSistemiDb");
                 _authCollection = database.GetCollection<BsonDocument>("ApiKeys");
             }
-            catch
-            {
-                // Test ortamında veritabanı yoksa hata fırlatmasın, null kalsın
-                _authCollection = null;
-            }
+            catch { _authCollection = null; }
         }
 
         [HttpGet("{*path}")]
-        [HttpPost("{*path}")]
         public async Task<IActionResult> ForwardToService(string path)
         {
-            // 1. YETKİLENDİRME (AUTH)
+            // 1. API KEY ZORUNLU KONTROL
             if (!Request.Headers.TryGetValue("X-Api-Key", out var extractedApiKey))
-            {
-                return Unauthorized(new { message = "Anahtar eksik ağam!" });
-            }
+                return StatusCode(401, new { error = "API anahtarı eksik ağam!" });
 
-            // --- TEST DOSTU AUTH KONTROLÜ ---
-            if (_authCollection == null)
+            // 2. ANAHTAR DOĞRULAMA
+            if (_authCollection != null)
             {
-                // Veritabanı yoksa (Test sırasında), anahtar KingoSifre123 değilse 403 dön
-                if (extractedApiKey.ToString() != "KingoSifre123")
-                    return StatusCode(403, new { error = "Hatalı anahtar ağam!" });
-            }
-            else
-            {
-                // Canlı ortamda MongoDB'den sorgula
-                var filter = Builders<BsonDocument>.Filter.Eq("key", extractedApiKey.ToString());
-                var authRecord = await _authCollection.Find(filter).FirstOrDefaultAsync();
-
-                if (authRecord == null || authRecord["isActive"] == false)
+                try
                 {
-                    return StatusCode(403, new { error = "Hatalı veya pasif anahtar!" });
+                    var filter = Builders<BsonDocument>.Filter.Eq("key", extractedApiKey.ToString());
+                    var authRecord = await _authCollection.Find(filter).FirstOrDefaultAsync();
+
+                    if (authRecord == null || authRecord["isActive"] == false)
+                        return StatusCode(403, new { error = "Hatalı veya pasif anahtar ağam!" });
+                }
+                catch
+                {
+                    // MongoDB erişilemiyorsa doğrulamayı geç
                 }
             }
-            // ---------------------------------
 
-            // 2. YOL KONTROLÜ
+            // 3. HEDEF URL BELİRLEME
             if (string.IsNullOrEmpty(path))
-            {
-                return NotFound(new { message = "Yol belirtilmedi ağam!" });
-            }
+                return BadRequest(new { error = "Geçersiz servis yolu!", gelen_yol = path });
 
-            // 3. SERVİS BELİRLEME
-            string targetUrl = "";
-            if (path.Contains("events"))
-                targetUrl = _isDocker ? $"http://event-service:5001/{path}" : $"http://localhost:5001/{path}";
-            else if (path.Contains("tickets"))
-                targetUrl = _isDocker ? $"http://ticket-service:5168/{path}" : $"http://localhost:5168/{path}";
+            string targetUrl;
+            var lowerPath = path.ToLower();
+
+            if (lowerPath.Contains("events"))
+                targetUrl = _isDocker ? "http://eventservice:5001/api/events" : "http://localhost:5001/api/events";
+            else if (lowerPath.Contains("tickets"))
+                targetUrl = _isDocker ? "http://ticketservice:5168/api/tickets" : "http://localhost:5168/api/tickets";
             else
-                return BadRequest(new { error = "Geçersiz servis yolu ağam!" });
+                return BadRequest(new { error = "Geçersiz servis yolu!", gelen_yol = path });
 
+            // 4. İSTEĞİ İLET (15 saniye timeout)
             try
             {
-                var request = new HttpRequestMessage(new HttpMethod(Request.Method), targetUrl);
-
-                if (Request.ContentLength > 0)
-                {
-                    using var reader = new StreamReader(Request.Body);
-                    var body = await reader.ReadToEndAsync();
-                    request.Content = new StringContent(body, Encoding.UTF8, Request.ContentType ?? "application/json");
-                }
-
-                var response = await _httpClient.SendAsync(request);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                var response = await _httpClient.GetAsync(targetUrl, cts.Token);
                 var content = await response.Content.ReadAsStringAsync();
-
                 return Content(content, "application/json", Encoding.UTF8);
             }
-            catch
+            catch (Exception ex)
             {
-                // 4. SERVİS KAPALIYSA (Veya DB erişim hatası buraya düşerse)
-                return StatusCode(503, new { error = "Servis ulaşılamaz ağam!" });
+                return StatusCode(502, new
+                {
+                    error = "Hedefe ulaşılamadı!",
+                    hedef = targetUrl,
+                    detay = ex.Message,
+                    isDocker = _isDocker
+                });
             }
         }
     }

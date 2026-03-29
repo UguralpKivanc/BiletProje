@@ -1,64 +1,124 @@
-version: '3.4'
-
 services:
-  # 1. Veritabanı (MongoDB)
+
+  # ── VERİ TABANI ──────────────────────────────────────────────────────────────
   mongodb:
     image: mongo:latest
     container_name: mongodb_container
-    ports:
-      - "27017:27017"
+    # Port dışa açılmıyor - sadece iç ağdan erişilebilir
+    environment:
+      - MONGO_INITDB_DATABASE=BiletSistemiDb
+    volumes:
+      - mongodb_data:/data/db
     networks:
-      - bilet_network
+      - backend_network
 
-  # 2. Ana Giriş Kapısı (Dispatcher)
+  # ── KİMLİK DOĞRULAMA SERVİSİ ─────────────────────────────────────────────
+  authservice:
+    build: { context: ./AuthService }
+    container_name: authservice_container
+    # Port dışa açılmıyor - sadece Dispatcher üzerinden erişilir
+    environment:
+      - ASPNETCORE_URLS=http://+:5002
+      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
+      - JWT_SECRET=BiletSistemi-JWT-Gizli-Anahtar-2026-SuperSecret!
+    depends_on:
+      - mongodb
+    networks:
+      - backend_network
+
+  # ── ETKİNLİK SERVİSİ ─────────────────────────────────────────────────────
+  eventservice:
+    build: { context: ./EventService }
+    container_name: eventservice_container
+    # Port dışa açılmıyor - sadece Dispatcher üzerinden erişilir
+    environment:
+      - ASPNETCORE_URLS=http://+:5001
+      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
+    depends_on:
+      - mongodb
+    networks:
+      - backend_network
+
+  # ── BİLET SERVİSİ ────────────────────────────────────────────────────────
+  ticketservice:
+    build: { context: ./TicketService }
+    container_name: ticketservice_container
+    # Port dışa açılmıyor - sadece Dispatcher üzerinden erişilir
+    environment:
+      - ASPNETCORE_URLS=http://+:5168
+      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
+    depends_on:
+      - mongodb
+    networks:
+      - backend_network
+
+  # ── API GATEWAY (Dispatcher) - TEK DIŞ YÜZLÜ SERVİS ─────────────────────
   dispatcher:
-    build:
-      context: ./Dispatcher
-      dockerfile: Dockerfile
+    build: { context: ./Dispatcher }
     container_name: dispatcher_container
     ports:
-      - "5000:5000"
+      - "5000:5000"   # Dışarıya açık tek port
     environment:
       - ASPNETCORE_URLS=http://+:5000
       - DOCKER_ENV=true
+      - JWT_SECRET=BiletSistemi-JWT-Gizli-Anahtar-2026-SuperSecret!
     depends_on:
-      - event-service
-      - ticket-service
+      - eventservice
+      - ticketservice
+      - authservice
     networks:
-      - bilet_network
+      - frontend_network  # Dış dünyaya açık
+      - backend_network   # İç servislere erişim
 
-  # 3. Etkinlik Servisi
-  event-service:
-    build:
-      context: ./EventService
-      dockerfile: Dockerfile
-    container_name: event_service_container
+  # ── PROMETHEUS - METRİK TOPLAMA ──────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_container
     ports:
-      - "5001:5001"
-    environment:
-      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
-      - ASPNETCORE_URLS=http://+:5001
-    depends_on:
-      - mongodb
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
     networks:
-      - bilet_network
+      - frontend_network  # Dışarıdan erişim için
+      - backend_network   # Servisleri scrape etmek için
 
-  # 4. Bilet Servisi
-  ticket-service:
-    build:
-      context: ./TicketService
-      dockerfile: Dockerfile
-    container_name: ticket_service_container
+  # ── GRAFANA - METRİK GÖRSELLEŞTIRME ──────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_container
     ports:
-      - "5168:5168"
+      - "3000:3000"   # Grafana UI
     environment:
-      - ConnectionStrings__MongoDb=mongodb://mongodb:27017
-      - ASPNETCORE_URLS=http://+:5168
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=bilet2026
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
     depends_on:
-      - mongodb
+      - prometheus
     networks:
-      - bilet_network
+      - frontend_network  # Dış dünyaya açık (UI erişimi)
+      - backend_network   # Prometheus'a erişim
 
 networks:
-  bilet_network:
+  # Dış dünyaya açık ağ: sadece Dispatcher ve Grafana
+  frontend_network:
     driver: bridge
+
+  # İç ağ: tüm backend servisleri (dışarıdan erişilemiyor)
+  backend_network:
+    driver: bridge
+    internal: true
+
+volumes:
+  mongodb_data:
+  prometheus_data:
+  grafana_data:

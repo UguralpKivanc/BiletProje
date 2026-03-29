@@ -18,5 +18,8 @@ namespace eventservice.Models
 
         [BsonElement("Date")] // Büyük 'D'
         public DateTime Date { get; set; }
+
+        [BsonElement("Price")] // Büyük 'P'
+        public decimal Price { get; set; }
     }
 }

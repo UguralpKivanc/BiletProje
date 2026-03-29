@@ -1,37 +1,50 @@
+using eventservice.Repositories;
+using MongoDB.Bson;
 using MongoDB.Driver;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Bağlantı dizesini hem Docker hem Local uyumlu yapıyoruz
+builder.WebHost.UseUrls("http://*:5001");
+
 var mongoConn = Environment.GetEnvironmentVariable("ConnectionStrings__MongoDb")
                 ?? "mongodb://mongodb:27017";
 
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoConn));
+builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// Hata detaylarını görmek için önemli
 app.UseDeveloperExceptionPage();
+app.UseHttpMetrics();   // Prometheus HTTP metrikleri
+app.MapMetrics();       // /metrics endpoint'i
+
 app.MapControllers();
 
-// Veritabanı başlangıç verisi (Hata almaması için Try-Catch içine aldık)
+// Seed Data
 try
 {
     var client = app.Services.GetRequiredService<IMongoClient>();
     var db = client.GetDatabase("BiletSistemiDb");
-    var collection = db.GetCollection<dynamic>("Events");
+    var collection = db.GetCollection<BsonDocument>("Events");
 
-    // Uygulama açılırken MongoDB hazır değilse beklemesi için küçük bir kontrol
-    if (collection.CountDocuments(_ => true) == 0)
+    if (collection.CountDocuments(new BsonDocument()) == 0)
     {
-        collection.InsertOne(new { name = "Tarkan Konseri", location = "Istanbul", date = DateTime.Now.AddDays(10), price = 500 });
-        Console.WriteLine("--> Event verisi eklendi.");
+        var tarkan = new BsonDocument
+        {
+            { "Name", "Tarkan Konseri" },
+            { "Location", "Istanbul" },
+            { "Date", new DateTime(2026, 5, 30) },
+            { "Price", 500 }
+        };
+        collection.InsertOne(tarkan);
+        Console.WriteLine("--> AĞAM: Tarkan Konseri Veritabanına İşlendi!");
     }
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"--> MongoDB henüz hazır değil: {ex.Message}");
+    Console.WriteLine($"--> MongoDB Hatası: {ex.Message}");
 }
 
 app.Run();

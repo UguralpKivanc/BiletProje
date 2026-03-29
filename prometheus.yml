@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'dispatcher'
+    static_configs:
+      - targets: ['dispatcher:5000']
+    metrics_path: /metrics
+
+  - job_name: 'eventservice'
+    static_configs:
+      - targets: ['eventservice:5001']
+    metrics_path: /metrics
+
+  - job_name: 'ticketservice'
+    static_configs:
+      - targets: ['ticketservice:5168']
+    metrics_path: /metrics
+
+  - job_name: 'authservice'
+    static_configs:
+      - targets: ['authservice:5002']
+    metrics_path: /metrics
