@@ -20,9 +20,25 @@ namespace eventservice.Controllers
         public async Task<IActionResult> Get()
         {
             var events = await _repository.GetAllAsync();
+
             if (!events.Any())
                 return Ok(new { message = "Bağlantı OK ama 'Events' içi boş görünüyor ağam!" });
-            return Ok(events);
+
+            var items = events.Select(e => new
+            {
+                data  = e,
+                links = BuildLinks(e.Id!)
+            });
+
+            return Ok(new
+            {
+                data  = items,
+                links = new[]
+                {
+                    new HateoasLink("self",   "/api/events", "GET"),
+                    new HateoasLink("create", "/api/events", "POST")
+                }
+            });
         }
 
         // GET /api/events/{id}
@@ -31,7 +47,12 @@ namespace eventservice.Controllers
         {
             var evt = await _repository.GetByIdAsync(id);
             if (evt == null) return NotFound(new { error = "Etkinlik bulunamadı!" });
-            return Ok(evt);
+
+            return Ok(new
+            {
+                data  = evt,
+                links = BuildLinks(id)
+            });
         }
 
         // POST /api/events
@@ -39,7 +60,14 @@ namespace eventservice.Controllers
         public async Task<IActionResult> Post([FromBody] Event evt)
         {
             var created = await _repository.CreateAsync(evt);
-            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+
+            var response = new
+            {
+                data  = created,
+                links = BuildLinks(created.Id!)
+            };
+
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, response);
         }
 
         // PUT /api/events/{id}
@@ -48,8 +76,15 @@ namespace eventservice.Controllers
         {
             var existing = await _repository.GetByIdAsync(id);
             if (existing == null) return NotFound(new { error = "Etkinlik bulunamadı!" });
+
             await _repository.UpdateAsync(id, evt);
-            return NoContent();
+
+            evt.Id = id;
+            return Ok(new
+            {
+                data  = evt,
+                links = BuildLinks(id)
+            });
         }
 
         // DELETE /api/events/{id}
@@ -58,8 +93,18 @@ namespace eventservice.Controllers
         {
             var existing = await _repository.GetByIdAsync(id);
             if (existing == null) return NotFound(new { error = "Etkinlik bulunamadı!" });
+
             await _repository.DeleteAsync(id);
             return NoContent();
         }
+
+        // ── Yardımcı ─────────────────────────────────────────────────────────────
+        private static HateoasLink[] BuildLinks(string id) =>
+        [
+            new HateoasLink("self",       $"/api/events/{id}", "GET"),
+            new HateoasLink("update",     $"/api/events/{id}", "PUT"),
+            new HateoasLink("delete",     $"/api/events/{id}", "DELETE"),
+            new HateoasLink("collection", "/api/events",       "GET")
+        ];
     }
 }

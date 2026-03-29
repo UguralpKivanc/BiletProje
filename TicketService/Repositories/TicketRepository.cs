@@ -10,12 +10,24 @@ namespace TicketService.Repositories
 
         public TicketRepository(IMongoClient mongoClient)
         {
-            var database = mongoClient.GetDatabase("BiletSistemiDb");
+            var database = mongoClient.GetDatabase("TicketServiceDb");
             _collection = database.GetCollection<Ticket>("Tickets");
         }
 
         public async Task<List<Ticket>> GetAllAsync()
             => await _collection.Find(new BsonDocument()).ToListAsync();
+
+        public async Task<(List<Ticket> Items, long TotalCount)> GetPagedAsync(int page, int pageSize)
+        {
+            var filter = new BsonDocument();
+            var total  = await _collection.CountDocumentsAsync(filter);
+            var items  = await _collection.Find(filter)
+                .SortByDescending(t => t.PurchaseDate)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+            return (items, total);
+        }
 
         public async Task<Ticket?> GetByIdAsync(string id)
         {

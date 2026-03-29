@@ -26,7 +26,7 @@ app.MapControllers();
 try
 {
     var client = app.Services.GetRequiredService<IMongoClient>();
-    var db = client.GetDatabase("BiletSistemiDb");
+    var db = client.GetDatabase("EventServiceDb");
     var collection = db.GetCollection<BsonDocument>("Events");
 
     if (collection.CountDocuments(new BsonDocument()) == 0)

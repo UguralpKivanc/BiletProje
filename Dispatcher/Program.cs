@@ -75,9 +75,11 @@ app.MapGet("/", () =>
             .btn {
                 padding: 10px 22px; border-radius: 6px; border: none;
                 font-size: 0.9rem; font-weight: 600; cursor: pointer;
-                text-decoration: none; display: inline-block; transition: opacity .15s;
+                text-decoration: none; display: inline-flex; align-items: center;
+                gap: 6px; transition: opacity .15s;
             }
             .btn:hover { opacity: .85; }
+            .btn:disabled { opacity: .5; cursor: not-allowed; }
             .btn-green  { background: #238636; color: #fff; }
             .btn-blue   { background: #1f6feb; color: #fff; }
             .btn-purple { background: #6e40c9; color: #fff; }
@@ -155,6 +157,25 @@ app.MapGet("/", () =>
                 white-space: pre-wrap;
             }
 
+            /* PAGİNASYON */
+            .pagination {
+                display: none;
+                align-items: center;
+                justify-content: space-between;
+                margin-top: 14px;
+                gap: 10px;
+            }
+            .pagination.visible { display: flex; }
+            .page-info { font-size: 0.82rem; color: #8b949e; }
+            .page-btns { display: flex; gap: 8px; }
+            .page-btn {
+                padding: 6px 14px; border-radius: 6px; border: 1px solid #30363d;
+                background: #161b22; color: #c9d1d9; font-size: 0.82rem;
+                cursor: pointer; transition: border-color .15s;
+            }
+            .page-btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
+            .page-btn:disabled { opacity: .35; cursor: not-allowed; }
+
             .spinner {
                 display: inline-block;
                 width: 16px; height: 16px;
@@ -175,9 +196,9 @@ app.MapGet("/", () =>
 
             <!-- NAV -->
             <div class="nav">
-                <a class="btn btn-green"  href="/api/events"  target="_blank">Etkinlikleri Listele</a>
-                <a class="btn btn-blue"   href="/api/tickets" target="_blank">Biletleri Listele</a>
-                <a class="btn btn-purple" href="/metrics"     target="_blank">Prometheus Metrikleri</a>
+                <button class="btn btn-green"  id="btnEvents">Etkinlikleri Listele</button>
+                <button class="btn btn-blue"   id="btnTickets">Biletleri Listele</button>
+                <a class="btn btn-purple" href="/metrics" target="_blank">Prometheus Metrikleri</a>
             </div>
 
             <!-- BİLET SATIN ALMA FORMU -->
@@ -226,12 +247,128 @@ app.MapGet("/", () =>
             <div id="result">
                 <h3 id="resultTitle"></h3>
                 <pre id="resultBody"></pre>
+                <div class="pagination" id="pagination">
+                    <span class="page-info" id="pageInfo"></span>
+                    <div class="page-btns">
+                        <button class="page-btn" id="btnPrev">&#8592; Önceki</button>
+                        <button class="page-btn" id="btnNext">Sonraki &#8594;</button>
+                    </div>
+                </div>
             </div>
         </div>
 
         <script>
             const API_KEY = 'KingoSifre123';
 
+            // ── LİSTELEME BUTONLARI ──────────────────────────────────────────────
+            const PAGE_SIZE = 10;
+            let ticketPage  = 1;
+            let ticketTotal = 0;
+
+            async function fetchAndShow(url, btn, label) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span>' + label;
+                const result     = document.getElementById('result');
+                const pagination = document.getElementById('pagination');
+                result.style.display = 'none';
+                pagination.classList.remove('visible');
+
+                try {
+                    const res  = await fetch(url, { headers: { 'X-Api-Key': API_KEY } });
+                    const text = await res.text();
+                    let pretty;
+                    try   { pretty = JSON.stringify(JSON.parse(text), null, 2); }
+                    catch { pretty = text; }
+
+                    result.className = res.ok ? 'success' : 'error';
+                    document.getElementById('resultTitle').textContent =
+                        res.ok ? `${label} (HTTP ${res.status})` : `Hata (HTTP ${res.status})`;
+                    document.getElementById('resultBody').textContent = pretty;
+                } catch (err) {
+                    result.className = 'error';
+                    document.getElementById('resultTitle').textContent = 'Bağlantı Hatası';
+                    document.getElementById('resultBody').textContent  = err.message;
+                } finally {
+                    result.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = label;
+                    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+
+            async function fetchTickets(page) {
+                const btn        = document.getElementById('btnTickets');
+                const result     = document.getElementById('result');
+                const pagination = document.getElementById('pagination');
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span>Biletleri Listele';
+                result.style.display = 'none';
+                pagination.classList.remove('visible');
+
+                try {
+                    const res  = await fetch(`/api/tickets?page=${page}&pageSize=${PAGE_SIZE}`,
+                                            { headers: { 'X-Api-Key': API_KEY } });
+                    const text = await res.text();
+                    let data, pretty;
+                    try {
+                        data   = JSON.parse(text);
+                        pretty = JSON.stringify(data, null, 2);
+                    } catch {
+                        pretty = text;
+                        data   = null;
+                    }
+
+                    result.className = res.ok ? 'success' : 'error';
+
+                    if (res.ok && data?.pagination) {
+                        const p = data.pagination;
+                        ticketPage  = p.page;
+                        ticketTotal = p.totalPages;
+
+                        document.getElementById('resultTitle').textContent =
+                            `Biletleri Listele — Sayfa ${p.page} / ${p.totalPages}  (Toplam: ${p.totalCount})`;
+                        document.getElementById('pageInfo').textContent =
+                            `${(p.page - 1) * p.pageSize + 1}–${Math.min(p.page * p.pageSize, p.totalCount)} / ${p.totalCount} kayıt`;
+                        document.getElementById('btnPrev').disabled = p.page <= 1;
+                        document.getElementById('btnNext').disabled = p.page >= p.totalPages;
+                        pagination.classList.add('visible');
+                    } else {
+                        document.getElementById('resultTitle').textContent =
+                            res.ok ? `Biletleri Listele (HTTP ${res.status})` : `Hata (HTTP ${res.status})`;
+                    }
+
+                    document.getElementById('resultBody').textContent = pretty;
+                } catch (err) {
+                    result.className = 'error';
+                    document.getElementById('resultTitle').textContent = 'Bağlantı Hatası';
+                    document.getElementById('resultBody').textContent  = err.message;
+                } finally {
+                    result.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'Biletleri Listele';
+                    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+
+            document.getElementById('btnEvents').addEventListener('click', function () {
+                fetchAndShow('/api/events', this, 'Etkinlikleri Listele');
+            });
+
+            document.getElementById('btnTickets').addEventListener('click', () => {
+                ticketPage = 1;
+                fetchTickets(1);
+            });
+
+            document.getElementById('btnPrev').addEventListener('click', () => {
+                if (ticketPage > 1) fetchTickets(ticketPage - 1);
+            });
+
+            document.getElementById('btnNext').addEventListener('click', () => {
+                if (ticketPage < ticketTotal) fetchTickets(ticketPage + 1);
+            });
+
+            // ── BİLET SATIN ALMA ─────────────────────────────────────────────────
             document.getElementById('ticketForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn    = document.getElementById('submitBtn');
@@ -319,7 +456,7 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
     {
         try
         {
-            var db = mongoClient.GetDatabase("BiletSistemiDb");
+            var db = mongoClient.GetDatabase("AuthServiceDb");
             var authCollection = db.GetCollection<BsonDocument>("ApiKeys");
             var filter = Builders<BsonDocument>.Filter.Eq("key", apiKey.ToString());
             var authRecord = await authCollection.Find(filter).FirstOrDefaultAsync();

@@ -4,12 +4,14 @@ services:
   mongodb:
     image: mongo:latest
     container_name: mongodb_container
-    # Port dışa açılmıyor - sadece iç ağdan erişilebilir
+    ports:
+      - "27017:27017"
     environment:
       - MONGO_INITDB_DATABASE=BiletSistemiDb
     volumes:
       - mongodb_data:/data/db
     networks:
+      - frontend_network  # Host port binding için gerekli
       - backend_network
 
   # ── KİMLİK DOĞRULAMA SERVİSİ ─────────────────────────────────────────────

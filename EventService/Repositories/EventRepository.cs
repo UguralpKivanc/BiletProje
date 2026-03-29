@@ -10,7 +10,7 @@ namespace eventservice.Repositories
 
         public EventRepository(IMongoClient mongoClient)
         {
-            var database = mongoClient.GetDatabase("BiletSistemiDb");
+            var database = mongoClient.GetDatabase("EventServiceDb");
             _collection = database.GetCollection<Event>("Events");
         }
 

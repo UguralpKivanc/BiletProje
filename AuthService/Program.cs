@@ -27,7 +27,7 @@ app.MapControllers();
 try
 {
     var client = app.Services.GetRequiredService<IMongoClient>();
-    var db = client.GetDatabase("BiletSistemiDb");
+    var db = client.GetDatabase("AuthServiceDb");
     var usersCollection = db.GetCollection<BsonDocument>("Users");
 
     if (usersCollection.CountDocuments(new BsonDocument()) == 0)
