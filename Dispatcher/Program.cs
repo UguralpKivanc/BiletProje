@@ -20,411 +20,745 @@ builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoConn));
 
 var app = builder.Build();
 
-// ── GÖREV 3: TRAFİK LOGLAMA MIDDLEWARE ──────────────────────────────────────
+// ── TRAFİK LOGLAMA MIDDLEWARE ─────────────────────────────────────────────────
 app.Use(async (context, next) =>
 {
     var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
     var sw = Stopwatch.StartNew();
     var ip = context.Connection.RemoteIpAddress?.ToString() ?? "?";
-
     logger.LogInformation("[TRAFİK] → {Method} {Path}{Query} | IP: {IP}",
-        context.Request.Method,
-        context.Request.Path,
-        context.Request.QueryString,
-        ip);
-
+        context.Request.Method, context.Request.Path, context.Request.QueryString, ip);
     await next();
-
     sw.Stop();
     logger.LogInformation("[TRAFİK] ← {Method} {Path} | Status: {Status} | {Ms}ms",
-        context.Request.Method,
-        context.Request.Path,
-        context.Response.StatusCode,
-        sw.ElapsedMilliseconds);
+        context.Request.Method, context.Request.Path, context.Response.StatusCode, sw.ElapsedMilliseconds);
 });
 
-// ── GÖREV 4: PROMETHEUS METRİKLERİ ──────────────────────────────────────────
+// ── PROMETHEUS METRİKLERİ ─────────────────────────────────────────────────────
 app.UseHttpMetrics();
-app.MapMetrics(); // /metrics endpoint'i (catch-all'dan önce geldiği için öncelikli)
+app.MapMetrics();
 
-// ── ANA SAYFA ────────────────────────────────────────────────────────────────
+// ── ANA SAYFA ─────────────────────────────────────────────────────────────────
 app.MapGet("/", () =>
 {
     var html = """
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bilet Sistemi</title>
-        <style>
-            *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-                background: #0d1117;
-                color: #c9d1d9;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                min-height: 100vh;
-                padding: 40px 16px;
-            }
-            .container { max-width: 860px; margin: 0 auto; }
-            h1 { color: #58a6ff; font-size: 1.8rem; margin-bottom: 4px; }
-            .subtitle { color: #8b949e; margin-bottom: 32px; font-size: 0.95rem; }
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BiletSistemi — Etkinlik Biletleri</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --pink:#ff0080;--orange:#ff6b35;--gold:#ffd700;
+  --grad:linear-gradient(135deg,#ff0080,#ff6b35);
+  --grad-r:linear-gradient(135deg,#ff6b35,#ff0080);
+  --bg:#000;--s1:#0d0d0d;--s2:#111;--s3:#1a1a1a;--s4:#222;
+  --text:#fff;--muted:rgba(255,255,255,.5);--dim:rgba(255,255,255,.08);
+  --border:rgba(255,255,255,.1);--r:12px;
+  --tr:.28s cubic-bezier(.4,0,.2,1);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
 
-            /* NAV BUTONLARI */
-            .nav { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 36px; }
-            .btn {
-                padding: 10px 22px; border-radius: 6px; border: none;
-                font-size: 0.9rem; font-weight: 600; cursor: pointer;
-                text-decoration: none; display: inline-flex; align-items: center;
-                gap: 6px; transition: opacity .15s;
-            }
-            .btn:hover { opacity: .85; }
-            .btn:disabled { opacity: .5; cursor: not-allowed; }
-            .btn-green  { background: #238636; color: #fff; }
-            .btn-blue   { background: #1f6feb; color: #fff; }
-            .btn-purple { background: #6e40c9; color: #fff; }
+/* ── CONFETTI ── */
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:9999;display:none}
 
-            /* FORM KARTI */
-            .card {
-                background: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 12px;
-                padding: 28px 32px;
-                margin-bottom: 24px;
-            }
-            .card h2 { color: #58a6ff; font-size: 1.15rem; margin-bottom: 20px; }
-            .form-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 16px;
-            }
-            .form-group { display: flex; flex-direction: column; gap: 6px; }
-            .form-group.full { grid-column: 1 / -1; }
-            label { font-size: 0.82rem; color: #8b949e; font-weight: 500; }
-            input {
-                background: #0d1117;
-                border: 1px solid #30363d;
-                border-radius: 6px;
-                color: #c9d1d9;
-                padding: 9px 12px;
-                font-size: 0.95rem;
-                outline: none;
-                transition: border-color .15s;
-            }
-            input:focus { border-color: #58a6ff; }
-            .apikey-row {
-                display: flex; align-items: center; gap: 10px;
-                background: #0d1117;
-                border: 1px solid #238636;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 0.82rem; color: #3fb950;
-            }
-            .apikey-row span { opacity: .7; }
-            .submit-btn {
-                grid-column: 1 / -1;
-                padding: 12px;
-                background: #238636;
-                color: #fff;
-                border: none; border-radius: 6px;
-                font-size: 1rem; font-weight: 600;
-                cursor: pointer; transition: background .15s;
-            }
-            .submit-btn:hover { background: #2ea043; }
-            .submit-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+/* ── NAVBAR ── */
+.navbar{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(0,0,0,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border-bottom:1px solid rgba(255,0,128,.2);
+  height:64px;display:flex;align-items:center;
+}
+.nav-inner{
+  width:100%;max-width:1280px;margin:0 auto;padding:0 24px;
+  display:flex;align-items:center;gap:32px;
+}
+.nav-logo{
+  font-size:1.15rem;font-weight:900;letter-spacing:-.02em;
+  background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  display:flex;align-items:center;gap:8px;white-space:nowrap;
+  text-decoration:none;
+}
+.nav-logo .tick{font-size:1.25rem;-webkit-text-fill-color:initial}
+.nav-links{display:flex;align-items:center;gap:4px;flex:1}
+.nav-link{
+  padding:8px 16px;background:none;border:none;color:var(--muted);
+  font-size:.9rem;font-weight:500;cursor:pointer;border-radius:8px;
+  transition:var(--tr);white-space:nowrap;
+}
+.nav-link:hover,.nav-link.active{color:var(--text);background:var(--dim)}
+.nav-link.active{color:var(--pink)}
+.nav-cta{
+  margin-left:auto;padding:10px 22px;
+  background:var(--grad);border:none;border-radius:8px;
+  color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;
+  transition:var(--tr);white-space:nowrap;
+}
+.nav-cta:hover{box-shadow:0 0 24px rgba(255,0,128,.55),0 0 48px rgba(255,107,53,.2);transform:translateY(-1px)}
+.nav-metrics{
+  padding:8px 14px;background:none;border:1px solid var(--border);
+  border-radius:8px;color:var(--muted);font-size:.82rem;cursor:pointer;
+  text-decoration:none;transition:var(--tr);white-space:nowrap;
+}
+.nav-metrics:hover{border-color:var(--pink);color:var(--text)}
 
-            /* SONUÇ ALANI */
-            #result {
-                display: none;
-                border-radius: 10px;
-                padding: 20px 24px;
-                border: 1px solid #30363d;
-                font-size: 0.88rem;
-            }
-            #result.success { border-color: #238636; background: #0f2a17; }
-            #result.error   { border-color: #da3633; background: #2d1117; }
-            #result h3 { margin-bottom: 10px; font-size: 1rem; }
-            #result.success h3 { color: #3fb950; }
-            #result.error   h3 { color: #f85149; }
-            pre {
-                background: #0d1117;
-                border-radius: 6px;
-                padding: 12px;
-                overflow-x: auto;
-                color: #c9d1d9;
-                font-size: 0.82rem;
-                line-height: 1.5;
-                white-space: pre-wrap;
-            }
+/* ── HERO ── */
+.hero{
+  padding:140px 24px 80px;
+  background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(255,0,128,.15) 0%,transparent 70%),
+             radial-gradient(ellipse 60% 50% at 80% 50%,rgba(255,107,53,.08) 0%,transparent 60%),
+             var(--bg);
+  position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:60px 60px;pointer-events:none;
+}
+.hero-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;gap:60px}
+.hero-text{flex:1;max-width:680px}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(255,0,128,.1);border:1px solid rgba(255,0,128,.3);
+  color:var(--pink);font-size:.75rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:6px 14px;border-radius:999px;margin-bottom:28px;
+}
+.hero-badge-dot{width:7px;height:7px;background:var(--pink);border-radius:50%;animation:pulse-dot 1.4s ease infinite}
+.hero h1{
+  font-size:clamp(2.8rem,6vw,5.2rem);font-weight:900;line-height:1.06;
+  letter-spacing:-.03em;margin-bottom:20px;
+}
+.hero h1 span{
+  background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero-sub{color:var(--muted);font-size:1.1rem;line-height:1.6;max-width:500px;margin-bottom:36px}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap}
+.btn-primary{
+  padding:14px 32px;background:var(--grad);border:none;border-radius:10px;
+  color:#fff;font-size:1rem;font-weight:700;cursor:pointer;transition:var(--tr);
+}
+.btn-primary:hover{box-shadow:0 0 30px rgba(255,0,128,.6),0 0 60px rgba(255,107,53,.2);transform:translateY(-2px)}
+.btn-ghost{
+  padding:14px 32px;background:none;border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font-size:1rem;font-weight:600;cursor:pointer;transition:var(--tr);
+}
+.btn-ghost:hover{border-color:var(--pink);box-shadow:0 0 16px rgba(255,0,128,.2)}
+.hero-stats{display:flex;gap:40px;margin-top:52px;padding-top:40px;border-top:1px solid var(--border)}
+.hero-stat-num{font-size:1.8rem;font-weight:800;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-stat-lbl{font-size:.78rem;color:var(--muted);margin-top:2px}
 
-            /* PAGİNASYON */
-            .pagination {
-                display: none;
-                align-items: center;
-                justify-content: space-between;
-                margin-top: 14px;
-                gap: 10px;
-            }
-            .pagination.visible { display: flex; }
-            .page-info { font-size: 0.82rem; color: #8b949e; }
-            .page-btns { display: flex; gap: 8px; }
-            .page-btn {
-                padding: 6px 14px; border-radius: 6px; border: 1px solid #30363d;
-                background: #161b22; color: #c9d1d9; font-size: 0.82rem;
-                cursor: pointer; transition: border-color .15s;
-            }
-            .page-btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
-            .page-btn:disabled { opacity: .35; cursor: not-allowed; }
+/* ── MAIN ── */
+.main-content{max-width:1280px;margin:0 auto;padding:60px 24px 100px}
 
-            .spinner {
-                display: inline-block;
-                width: 16px; height: 16px;
-                border: 2px solid #30363d;
-                border-top-color: #58a6ff;
-                border-radius: 50%;
-                animation: spin .7s linear infinite;
-                vertical-align: middle; margin-right: 6px;
-            }
-            @keyframes spin { to { transform: rotate(360deg); } }
-            @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } .form-group.full { grid-column: 1; } }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Bilet Sistemi</h1>
-            <p class="subtitle">Mikroservis API Gateway &mdash; v3.0</p>
+/* ── SECTION HEADER ── */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.sec-title{font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+.sec-title span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sec-badge{
+  font-size:.75rem;font-weight:600;padding:4px 12px;border-radius:999px;
+  background:rgba(255,0,128,.1);border:1px solid rgba(255,0,128,.3);color:var(--pink);
+}
 
-            <!-- NAV -->
-            <div class="nav">
-                <button class="btn btn-green"  id="btnEvents">Etkinlikleri Listele</button>
-                <button class="btn btn-blue"   id="btnTickets">Biletleri Listele</button>
-                <a class="btn btn-purple" href="/metrics" target="_blank">Prometheus Metrikleri</a>
-            </div>
+/* ── EVENT CARDS ── */
+.events-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:24px}
+.ev-card{
+  border-radius:16px;overflow:hidden;background:var(--s1);
+  border:1px solid var(--border);transition:var(--tr);
+  animation:fadeUp .45s ease both;cursor:pointer;
+}
+.ev-card:hover{transform:translateY(-6px);border-color:rgba(255,0,128,.4);box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 40px rgba(255,0,128,.12)}
+.ev-visual{
+  height:200px;position:relative;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.ev-visual::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:60%;
+  background:linear-gradient(to top,var(--s1),transparent);
+}
+.ev-emoji{font-size:5rem;filter:drop-shadow(0 0 30px currentColor);animation:float 3s ease-in-out infinite}
+.ev-tags{
+  position:absolute;top:14px;left:14px;
+  display:flex;gap:6px;z-index:1;
+}
+.ev-tag{
+  font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 9px;border-radius:4px;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);
+}
+.ev-hot{
+  position:absolute;top:14px;right:14px;z-index:1;
+  font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:4px;
+  background:rgba(255,0,0,.85);letter-spacing:.05em;text-transform:uppercase;
+  animation:blink 1.2s ease infinite;
+}
+.ev-body{padding:20px}
+.ev-name{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;margin-bottom:10px;line-height:1.3}
+.ev-meta{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.ev-meta-item{display:flex;align-items:center;gap:5px;font-size:.8rem;color:var(--muted)}
+.ev-footer{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.ev-price{font-size:1.3rem;font-weight:900}
+.ev-price-currency{font-size:.85rem;font-weight:600;color:var(--muted);margin-right:2px}
+.ev-counter{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600}
+.ev-counter-dot{width:7px;height:7px;border-radius:50%;background:#ff3333;flex-shrink:0;animation:pulse-dot 1.2s ease infinite}
+.ev-counter-num{color:#ff6666;font-size:.92rem;font-weight:800;min-width:24px;display:inline-block;text-align:right}
+.ev-counter-lbl{color:var(--muted)}
+.buy-btn{
+  padding:10px 22px;background:var(--grad);border:none;border-radius:8px;
+  color:#fff;font-size:.85rem;font-weight:700;cursor:pointer;transition:var(--tr);
+  white-space:nowrap;flex-shrink:0;
+}
+.buy-btn:hover{box-shadow:0 0 20px rgba(255,0,128,.6);transform:scale(1.04)}
 
-            <!-- BİLET SATIN ALMA FORMU -->
-            <div class="card">
-                <h2>Bilet Satın Al</h2>
-                <form id="ticketForm">
-                    <div class="form-grid">
+/* ── TICKET CARDS ── */
+.tickets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+.tk-card{
+  background:var(--s1);border:1px solid var(--border);border-radius:16px;
+  padding:0;overflow:hidden;transition:var(--tr);animation:fadeUp .4s ease both;
+  position:relative;
+}
+.tk-card:hover{transform:translateY(-4px);border-color:rgba(255,0,128,.3);box-shadow:0 16px 48px rgba(0,0,0,.5)}
+.tk-card-top{
+  padding:18px 20px 14px;
+  background:linear-gradient(135deg,var(--s2),var(--s3));
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.tk-status{
+  font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 10px;border-radius:4px;
+}
+.tk-status.active{background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:#00ff88}
+.tk-status.other {background:rgba(255,50,50,.12);border:1px solid rgba(255,50,50,.3);color:#ff6666}
+.tk-id{font-size:.7rem;color:var(--muted);font-family:monospace}
+.tk-body{padding:20px}
+.tk-event{font-size:1.05rem;font-weight:800;letter-spacing:-.01em;margin-bottom:16px}
+.tk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.tk-field label{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:3px}
+.tk-field span{font-size:.9rem;font-weight:600}
+.tk-price-big{font-size:1.25rem;font-weight:900;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.tk-barcode{
+  margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);
+  display:flex;align-items:center;gap:3px;
+}
+.tk-bar{background:var(--text);flex-shrink:0}
 
-                        <div class="form-group full">
-                            <label>Etkinlik Adı</label>
-                            <input type="text" id="eventName" placeholder="Örn: Tarkan Konseri" required>
-                        </div>
+/* ── LOADING ── */
+.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:100px 20px;gap:20px}
+.loader{width:48px;height:48px;border:3px solid var(--s3);border-top:3px solid var(--pink);border-radius:50%;animation:spin .75s linear infinite}
+.loading-text{color:var(--muted);font-size:.95rem}
 
-                        <div class="form-group">
-                            <label>Müşteri Adı</label>
-                            <input type="text" id="customerName" placeholder="Ad Soyad" required>
-                        </div>
+/* ── EMPTY ── */
+.empty-screen{display:flex;flex-direction:column;align-items:center;padding:80px 20px;gap:12px}
+.empty-ico{font-size:4rem;opacity:.35}
+.empty-text{color:var(--muted);font-size:.95rem}
 
-                        <div class="form-group">
-                            <label>Koltuk</label>
-                            <input type="text" id="seat" placeholder="Örn: A-12" required>
-                        </div>
+/* ── PAGINATION ── */
+.pagination{display:none;align-items:center;justify-content:center;gap:12px;margin-top:48px}
+.pagination.on{display:flex}
+.pg-btn{
+  padding:10px 24px;background:var(--s2);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:.88rem;font-weight:600;cursor:pointer;transition:var(--tr);
+}
+.pg-btn:hover:not(:disabled){border-color:var(--pink);box-shadow:0 0 16px rgba(255,0,128,.25)}
+.pg-btn:disabled{opacity:.3;cursor:not-allowed}
+.pg-info{font-size:.82rem;color:var(--muted);background:var(--s2);border:1px solid var(--border);padding:8px 18px;border-radius:8px}
 
-                        <div class="form-group">
-                            <label>Fiyat (TL)</label>
-                            <input type="number" id="price" placeholder="500" min="0" required>
-                        </div>
+/* ── MODAL ── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  z-index:200;align-items:center;justify-content:center;padding:20px;
+}
+.modal-overlay.open{display:flex;animation:fadeIn .2s ease}
+.modal{
+  background:var(--s1);border:1px solid rgba(255,0,128,.25);
+  border-radius:20px;width:100%;max-width:500px;overflow:hidden;
+  animation:slideUp .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:0 40px 100px rgba(0,0,0,.7),0 0 80px rgba(255,0,128,.08);
+}
+.modal-header{
+  background:linear-gradient(135deg,rgba(255,0,128,.15),rgba(255,107,53,.1));
+  border-bottom:1px solid rgba(255,0,128,.2);
+  padding:22px 28px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.modal-title{font-size:1.1rem;font-weight:800;letter-spacing:-.01em}
+.modal-close{
+  width:34px;height:34px;background:var(--dim);border:1px solid var(--border);
+  border-radius:50%;color:var(--muted);font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:var(--tr);
+}
+.modal-close:hover{background:rgba(255,50,50,.2);border-color:#f44;color:#f66}
+.modal-body{padding:28px}
+.f-group{margin-bottom:18px}
+.f-label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:7px}
+.f-input{
+  width:100%;background:var(--s3);border:1px solid var(--border);border-radius:10px;
+  color:var(--text);padding:12px 15px;font-size:.95rem;outline:none;transition:var(--tr);
+}
+.f-input:focus{border-color:var(--pink);background:rgba(255,0,128,.05);box-shadow:0 0 0 3px rgba(255,0,128,.1)}
+.f-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.auth-badge{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);
+  border-radius:10px;padding:11px 15px;font-size:.82rem;color:#00cc6a;
+}
+.auth-badge-icon{font-size:1rem}
+.modal-submit{
+  width:100%;padding:14px;margin-top:8px;
+  background:var(--grad);border:none;border-radius:10px;
+  color:#fff;font-size:1rem;font-weight:800;cursor:pointer;
+  transition:var(--tr);letter-spacing:.02em;
+}
+.modal-submit:hover{box-shadow:0 0 28px rgba(255,0,128,.55);transform:translateY(-1px)}
+.modal-submit:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 
-                        <div class="form-group">
-                            <label>API Kimlik Doğrulama</label>
-                            <div class="apikey-row">
-                                <span>X-Api-Key:</span>
-                                <strong>KingoSifre123</strong>
-                                <span style="margin-left:auto">&#10003; Otomatik Eklendi</span>
-                            </div>
-                        </div>
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:28px;right:28px;z-index:300;
+  max-width:360px;padding:14px 20px;border-radius:12px;
+  font-size:.9rem;font-weight:600;backdrop-filter:blur(16px);
+  opacity:0;transform:translateX(16px);pointer-events:none;
+  transition:opacity .3s,transform .3s;
+}
+.toast.on{opacity:1;transform:translateX(0);pointer-events:auto}
+.toast.ok {background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:#00ff88}
+.toast.err{background:rgba(255,50,50,.1);border:1px solid rgba(255,50,50,.3);color:#ff6666}
 
-                        <button type="submit" class="submit-btn" id="submitBtn">
-                            Bileti Satın Al
-                        </button>
-                    </div>
-                </form>
-            </div>
+/* ── ANIMATIONS ── */
+@keyframes fadeUp   {from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn   {from{opacity:0}to{opacity:1}}
+@keyframes slideUp  {from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin     {to{transform:rotate(360deg)}}
+@keyframes float    {0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-10px) scale(1.05)}}
+@keyframes pulse-dot{0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.6);opacity:.6}}
+@keyframes blink    {0%,100%{opacity:1} 50%{opacity:.5}}
+@keyframes countUp  {from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1}}
 
-            <!-- SONUÇ -->
-            <div id="result">
-                <h3 id="resultTitle"></h3>
-                <pre id="resultBody"></pre>
-                <div class="pagination" id="pagination">
-                    <span class="page-info" id="pageInfo"></span>
-                    <div class="page-btns">
-                        <button class="page-btn" id="btnPrev">&#8592; Önceki</button>
-                        <button class="page-btn" id="btnNext">Sonraki &#8594;</button>
-                    </div>
-                </div>
-            </div>
+@media(max-width:768px){
+  .hero-stats{display:none}
+  .hero h1{font-size:2.4rem}
+  .events-grid,.tickets-grid{grid-template-columns:1fr}
+  .f-row{grid-template-columns:1fr}
+  .nav-metrics{display:none}
+  .modal{max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<canvas id="confetti"></canvas>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <a class="nav-logo" href="#"><span class="tick">&#127903;</span>BiletSistemi</a>
+    <div class="nav-links">
+      <button class="nav-link" id="navEvents">&#127908; Etkinlikler</button>
+      <button class="nav-link" id="navTickets">&#127915; Biletlerim</button>
+    </div>
+    <a class="nav-metrics" href="/metrics" target="_blank">&#128202;</a>
+    <button class="nav-cta" id="navBuy">+ Bilet Satın Al</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="heroSection">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Canlı Etkinlikler &#8212; Türkiye Geneli
+      </div>
+      <h1>Unutulmaz<br>Anların<br><span>Tek Adresi.</span></h1>
+      <p class="hero-sub">Konserler, festivaller, tiyatrolar ve özel etkinlikler. Hepsini tek platformdan keşfet, anında satın al.</p>
+      <div class="hero-actions">
+        <button class="btn-primary" id="heroBrowse">Etkinlikleri Keşfet &#8594;</button>
+        <button class="btn-ghost" id="heroTickets">Biletlerim</button>
+      </div>
+      <div class="hero-stats">
+        <div>
+          <div class="hero-stat-num">1,200+</div>
+          <div class="hero-stat-lbl">Aktif Etkinlik</div>
         </div>
+        <div>
+          <div class="hero-stat-num">50K+</div>
+          <div class="hero-stat-lbl">Satılan Bilet</div>
+        </div>
+        <div>
+          <div class="hero-stat-num">%98</div>
+          <div class="hero-stat-lbl">Memnuniyet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-        <script>
-            const API_KEY = 'KingoSifre123';
+<!-- MAIN CONTENT -->
+<main class="main-content">
+  <div id="content-area"></div>
+  <div class="pagination" id="pagination">
+    <button class="pg-btn" id="btnPrev">&#8592; Önceki</button>
+    <span class="pg-info" id="pgInfo"></span>
+    <button class="pg-btn" id="btnNext">Sonraki &#8594;</button>
+  </div>
+</main>
 
-            // ── LİSTELEME BUTONLARI ──────────────────────────────────────────────
-            const PAGE_SIZE = 10;
-            let ticketPage  = 1;
-            let ticketTotal = 0;
+<!-- MODAL -->
+<div class="modal-overlay" id="mOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#127915; Bilet Satın Al</span>
+      <button class="modal-close" id="mClose">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <form id="ticketForm">
+        <div class="f-group">
+          <label class="f-label">Etkinlik Adı</label>
+          <input class="f-input" type="text" id="fEvent" placeholder="Örn: Tarkan Konseri" required>
+        </div>
+        <div class="f-row">
+          <div class="f-group">
+            <label class="f-label">Müşteri Adı</label>
+            <input class="f-input" type="text" id="fCustomer" placeholder="Ad Soyad" required>
+          </div>
+          <div class="f-group">
+            <label class="f-label">Koltuk</label>
+            <input class="f-input" type="text" id="fSeat" placeholder="A-12" required>
+          </div>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Fiyat (TL)</label>
+          <input class="f-input" type="number" id="fPrice" placeholder="500" min="0" required>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Kimlik Doğrulama</label>
+          <div class="auth-badge"><span class="auth-badge-icon">&#10003;</span> X-Api-Key otomatik eklendi</div>
+        </div>
+        <button type="submit" class="modal-submit" id="submitBtn">Satın Al &#8594;</button>
+      </form>
+    </div>
+  </div>
+</div>
 
-            async function fetchAndShow(url, btn, label) {
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner"></span>' + label;
-                const result     = document.getElementById('result');
-                const pagination = document.getElementById('pagination');
-                result.style.display = 'none';
-                pagination.classList.remove('visible');
+<div class="toast" id="toast"></div>
 
-                try {
-                    const res  = await fetch(url, { headers: { 'X-Api-Key': API_KEY } });
-                    const text = await res.text();
-                    let pretty;
-                    try   { pretty = JSON.stringify(JSON.parse(text), null, 2); }
-                    catch { pretty = text; }
+<script>
+const API_KEY = 'KingoSifre123';
 
-                    result.className = res.ok ? 'success' : 'error';
-                    document.getElementById('resultTitle').textContent =
-                        res.ok ? `${label} (HTTP ${res.status})` : `Hata (HTTP ${res.status})`;
-                    document.getElementById('resultBody').textContent = pretty;
-                } catch (err) {
-                    result.className = 'error';
-                    document.getElementById('resultTitle').textContent = 'Bağlantı Hatası';
-                    document.getElementById('resultBody').textContent  = err.message;
-                } finally {
-                    result.style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = label;
-                    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-            }
+const THEMES = [
+  {bg:'linear-gradient(160deg,#1a0533,#3d0070,#6600cc)',dot:'#cc44ff',icon:'🎤',tags:['KONSER','LIVE','POP']},
+  {bg:'linear-gradient(160deg,#330000,#660019,#cc0033)',dot:'#ff3366',icon:'🎸',tags:['ROCK','LIVE','18+']},
+  {bg:'linear-gradient(160deg,#001a33,#003366,#0055bb)',dot:'#00aaff',icon:'🎹',tags:['KLASİK','GALİ']},
+  {bg:'linear-gradient(160deg,#0a1a00,#1a4400,#2d7700)',dot:'#44ff88',icon:'🎷',tags:['CAZ','BLUES']},
+  {bg:'linear-gradient(160deg,#1a1000,#443300,#886600)',dot:'#ffcc00',icon:'🎺',tags:['FESTIVAL','OPEN AIR']},
+  {bg:'linear-gradient(160deg,#1a0011,#440033,#880066)',dot:'#ff44cc',icon:'🥁',tags:['EDM','DANS','18+']},
+  {bg:'linear-gradient(160deg,#001a1a,#004444,#007777)',dot:'#00ffee',icon:'🎻',tags:['OPERA','KLASİK']},
+  {bg:'linear-gradient(160deg,#1a0d00,#4a2200,#993300)',dot:'#ff8844',icon:'🎵',tags:['POP','TÜRKÇE']},
+];
 
-            async function fetchTickets(page) {
-                const btn        = document.getElementById('btnTickets');
-                const result     = document.getElementById('result');
-                const pagination = document.getElementById('pagination');
+let tPage=1, tTotal=0;
+const counterIntervals=[];
 
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner"></span>Biletleri Listele';
-                result.style.display = 'none';
-                pagination.classList.remove('visible');
+// ── CONFETTI ──────────────────────────────────────────────────────────────────
+function launchConfetti(){
+  const cv=document.getElementById('confetti');
+  cv.style.display='block';
+  cv.width=innerWidth; cv.height=innerHeight;
+  const ctx=cv.getContext('2d');
+  const cols=['#ff0080','#ff6b35','#ffd700','#00ff88','#00bfff','#ff4500','#ff69b4','#adff2f'];
+  const pieces=Array.from({length:180},()=>({
+    x:innerWidth*(.3+Math.random()*.4),
+    y:-10,
+    vx:(Math.random()-.5)*12,
+    vy:Math.random()*-8-4,
+    w:Math.random()*12+5,
+    h:Math.random()*6+3,
+    col:cols[Math.floor(Math.random()*cols.length)],
+    rot:Math.random()*360,
+    rv:(Math.random()-.5)*10,
+    grav:.38+Math.random()*.2,
+    a:1,
+  }));
+  let f=0;
+  function draw(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    let live=false;
+    pieces.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy; p.vy+=p.grav;
+      p.rot+=p.rv; p.vx*=.99;
+      if(p.y<cv.height+20) p.a=Math.max(0,1-f/160);
+      if(p.a>0){live=true;
+        ctx.save();ctx.globalAlpha=p.a;
+        ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);
+        ctx.fillStyle=p.col;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        ctx.restore();
+      }
+    });
+    f++;
+    if(f<200&&live) requestAnimationFrame(draw);
+    else cv.style.display='none';
+  }
+  draw();
+}
 
-                try {
-                    const res  = await fetch(`/api/tickets?page=${page}&pageSize=${PAGE_SIZE}`,
-                                            { headers: { 'X-Api-Key': API_KEY } });
-                    const text = await res.text();
-                    let data, pretty;
-                    try {
-                        data   = JSON.parse(text);
-                        pretty = JSON.stringify(data, null, 2);
-                    } catch {
-                        pretty = text;
-                        data   = null;
-                    }
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function toast(msg,type='ok',ms=3600){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`toast ${type} on`;
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),ms);
+}
 
-                    result.className = res.ok ? 'success' : 'error';
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function openModal(ev='',price=''){
+  document.getElementById('fEvent').value=ev;
+  document.getElementById('fPrice').value=price;
+  document.getElementById('mOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById(ev?'fCustomer':'fEvent').focus(),60);
+}
+function closeModal(){
+  document.getElementById('mOverlay').classList.remove('open');
+  document.getElementById('ticketForm').reset();
+}
+document.getElementById('mClose').onclick=closeModal;
+document.getElementById('navBuy').onclick=()=>openModal();
+document.getElementById('mOverlay').addEventListener('click',e=>{
+  if(e.target===document.getElementById('mOverlay'))closeModal();
+});
 
-                    if (res.ok && data?.pagination) {
-                        const p = data.pagination;
-                        ticketPage  = p.page;
-                        ticketTotal = p.totalPages;
+// ── COUNTER ANIMATION ─────────────────────────────────────────────────────────
+function seedRng(str){
+  let h=5381; for(let c of str) h=((h<<5)+h)+c.charCodeAt(0); return Math.abs(h);
+}
+function getRemaining(id){ return (seedRng(id||'x')%55)+18; } // 18-72
 
-                        document.getElementById('resultTitle').textContent =
-                            `Biletleri Listele — Sayfa ${p.page} / ${p.totalPages}  (Toplam: ${p.totalCount})`;
-                        document.getElementById('pageInfo').textContent =
-                            `${(p.page - 1) * p.pageSize + 1}–${Math.min(p.page * p.pageSize, p.totalCount)} / ${p.totalCount} kayıt`;
-                        document.getElementById('btnPrev').disabled = p.page <= 1;
-                        document.getElementById('btnNext').disabled = p.page >= p.totalPages;
-                        pagination.classList.add('visible');
-                    } else {
-                        document.getElementById('resultTitle').textContent =
-                            res.ok ? `Biletleri Listele (HTTP ${res.status})` : `Hata (HTTP ${res.status})`;
-                    }
+function animateCounter(el,target){
+  let v=target+Math.floor(seedRng(target+'s')%18)+4;
+  el.textContent=v;
+  const tid=setInterval(()=>{
+    if(v<=target){clearInterval(tid);el.style.animation='countUp .25s ease';return;}
+    v--; el.textContent=v;
+    if(v<=20){el.style.color='#ff3333';}
+    else if(v<=35){el.style.color='#ff8c00';}
+  },60);
+  // slow live ticker after initial animation
+  const liveTid=setInterval(()=>{
+    const cur=parseInt(el.textContent)||0;
+    if(cur>5&&Math.random()<.3){el.textContent=cur-1;}
+  },Math.random()*12000+8000);
+  counterIntervals.push(tid,liveTid);
+}
 
-                    document.getElementById('resultBody').textContent = pretty;
-                } catch (err) {
-                    result.className = 'error';
-                    document.getElementById('resultTitle').textContent = 'Bağlantı Hatası';
-                    document.getElementById('resultBody').textContent  = err.message;
-                } finally {
-                    result.style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = 'Biletleri Listele';
-                    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-            }
+function clearCounters(){ counterIntervals.forEach(clearInterval); counterIntervals.length=0; }
 
-            document.getElementById('btnEvents').addEventListener('click', function () {
-                fetchAndShow('/api/events', this, 'Etkinlikleri Listele');
-            });
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmtD(s,short){
+  if(!s)return '—';
+  try{const d=new Date(s);return d.toLocaleDateString('tr-TR',short?{day:'numeric',month:'short'}:{day:'numeric',month:'long',year:'numeric'});}
+  catch{return s;}
+}
+function fmtP(n){return n!=null?Number(n).toLocaleString('tr-TR')+' &#8378;':'—';}
 
-            document.getElementById('btnTickets').addEventListener('click', () => {
-                ticketPage = 1;
-                fetchTickets(1);
-            });
+function setActiveNav(id){
+  ['navEvents','navTickets'].forEach(b=>document.getElementById(b).classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showLoad(msg='Yükleniyor...'){
+  clearCounters();
+  document.getElementById('content-area').innerHTML=
+    `<div class="loading-screen"><div class="loader"></div><div class="loading-text">${msg}</div></div>`;
+  document.getElementById('pagination').classList.remove('on');
+}
+function showEmpty(ico,msg){
+  clearCounters();
+  document.getElementById('content-area').innerHTML=
+    `<div class="empty-screen"><div class="empty-ico">${ico}</div><div class="empty-text">${msg}</div></div>`;
+  document.getElementById('pagination').classList.remove('on');
+}
 
-            document.getElementById('btnPrev').addEventListener('click', () => {
-                if (ticketPage > 1) fetchTickets(ticketPage - 1);
-            });
+// ── BARCODE SVG ───────────────────────────────────────────────────────────────
+function barcode(id){
+  const seed=seedRng(id||'x');
+  let bars='';
+  for(let i=0;i<38;i++){
+    const w=((seed>>(i%16))&3)+1;
+    const x=i*6;
+    bars+=`<rect x="${x}" y="0" width="${w}" height="28" fill="rgba(255,255,255,0.7)"/>`;
+  }
+  return `<svg width="232" height="28" viewBox="0 0 232 28">${bars}</svg>`;
+}
 
-            document.getElementById('btnNext').addEventListener('click', () => {
-                if (ticketPage < ticketTotal) fetchTickets(ticketPage + 1);
-            });
+// ── RENDER EVENTS ─────────────────────────────────────────────────────────────
+function renderEvents(payload){
+  clearCounters();
+  const rows=payload.data;
+  document.getElementById('pagination').classList.remove('on');
+  if(!rows||!rows.length){showEmpty('🎭','Henüz etkinlik eklenmemiş.');return;}
+  const area=document.getElementById('content-area');
+  area.innerHTML=`
+    <div class="sec-head">
+      <h2 class="sec-title">Öne Çıkan <span>Etkinlikler</span></h2>
+      <span class="sec-badge">${rows.length} etkinlik</span>
+    </div>
+    <div class="events-grid" id="evGrid"></div>`;
+  const grid=document.getElementById('evGrid');
+  rows.forEach((item,i)=>{
+    const e=item.data;
+    const th=THEMES[i%THEMES.length];
+    const rem=getRemaining(e.id||String(i));
+    const isHot=rem<25;
+    const div=document.createElement('div');
+    div.className='ev-card';
+    div.style.animationDelay=`${i*70}ms`;
+    div.innerHTML=`
+      <div class="ev-visual" style="background:${th.bg}">
+        <div class="ev-tags">${th.tags.map(t=>`<span class="ev-tag">${t}</span>`).join('')}</div>
+        ${isHot?'<div class="ev-hot">&#128293; Son Biletler</div>':''}
+        <span class="ev-emoji">${th.icon}</span>
+      </div>
+      <div class="ev-body">
+        <div class="ev-name">${esc(e.name||'—')}</div>
+        <div class="ev-meta">
+          <span class="ev-meta-item">&#128205; ${esc(e.location||'—')}</span>
+          <span class="ev-meta-item">&#128197; ${fmtD(e.date,false)}</span>
+        </div>
+        <div class="ev-footer">
+          <div>
+            <div class="ev-counter">
+              <span class="ev-counter-dot"></span>
+              <span class="ev-counter-num" id="cnt-${i}">—</span>
+              <span class="ev-counter-lbl">bilet kaldı</span>
+            </div>
+            <div style="font-size:1.3rem;font-weight:900;margin-top:6px">
+              <span style="font-size:.82rem;color:var(--muted);font-weight:600">&#8378; </span>${e.price!=null?Number(e.price).toLocaleString('tr-TR'):'—'}
+            </div>
+          </div>
+          <button class="buy-btn" id="buy-${i}">Bilet Al &#8594;</button>
+        </div>
+      </div>`;
+    grid.appendChild(div);
+    animateCounter(document.getElementById(`cnt-${i}`),rem);
+    document.getElementById(`buy-${i}`).addEventListener('click',()=>openModal(e.name||'',e.price||''));
+  });
+}
 
-            // ── BİLET SATIN ALMA ─────────────────────────────────────────────────
-            document.getElementById('ticketForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const btn    = document.getElementById('submitBtn');
-                const result = document.getElementById('result');
+// ── RENDER TICKETS ────────────────────────────────────────────────────────────
+function renderTickets(payload){
+  clearCounters();
+  const pg=payload.pagination;
+  const rows=payload.data;
+  if(!rows||!rows.length){showEmpty('🎫','Henüz bilet yok.');return;}
+  const area=document.getElementById('content-area');
+  area.innerHTML=`
+    <div class="sec-head">
+      <h2 class="sec-title">Bilet <span>Geçmişim</span></h2>
+      <span class="sec-badge">${pg.totalCount} bilet</span>
+    </div>
+    <div class="tickets-grid" id="tkGrid"></div>`;
+  const grid=document.getElementById('tkGrid');
+  rows.forEach((item,i)=>{
+    const t=item.data;
+    const act=(t.status||'').toLowerCase()==='active';
+    const div=document.createElement('div');
+    div.className='tk-card';
+    div.style.animationDelay=`${i*65}ms`;
+    div.innerHTML=`
+      <div class="tk-card-top">
+        <span class="tk-status ${act?'active':'other'}">${act?'&#9679; Aktif':'&#9679; '+esc(t.status||'?')}</span>
+        <span class="tk-id">#${(t.id||'').slice(-8).toUpperCase()}</span>
+      </div>
+      <div class="tk-body">
+        <div class="tk-event">${esc(t.eventName||'—')}</div>
+        <div class="tk-grid">
+          <div class="tk-field"><label>Müşteri</label><span>${esc(t.customerName||'—')}</span></div>
+          <div class="tk-field"><label>Koltuk</label><span>${esc(t.seat||'—')}</span></div>
+          <div class="tk-field"><label>Fiyat</label><span class="tk-price-big">${t.price!=null?Number(t.price).toLocaleString('tr-TR')+' ₺':'—'}</span></div>
+          <div class="tk-field"><label>Tarih</label><span>${fmtD(t.purchaseDate,true)}</span></div>
+        </div>
+        <div class="tk-barcode">${barcode(t.id||String(i))}</div>
+      </div>`;
+    grid.appendChild(div);
+  });
+  tPage=pg.page; tTotal=pg.totalPages;
+  document.getElementById('pgInfo').textContent=`Sayfa ${pg.page} / ${pg.totalPages}`;
+  document.getElementById('btnPrev').disabled=pg.page<=1;
+  document.getElementById('btnNext').disabled=pg.page>=pg.totalPages;
+  document.getElementById('pagination').classList.toggle('on',pg.totalPages>1);
+}
 
-                // Formu oku
-                const payload = {
-                    EventName:    document.getElementById('eventName').value.trim(),
-                    CustomerName: document.getElementById('customerName').value.trim(),
-                    Seat:         document.getElementById('seat').value.trim(),
-                    Price:        parseFloat(document.getElementById('price').value),
-                    Status:       'Active',
-                    PurchaseDate: new Date().toISOString()
-                };
+// ── FETCH ─────────────────────────────────────────────────────────────────────
+async function loadEvents(){
+  setActiveNav('navEvents');
+  document.getElementById('heroSection').style.display='none';
+  showLoad('Etkinlikler yükleniyor...');
+  try{
+    const r=await fetch('/api/events',{headers:{'X-Api-Key':API_KEY}});
+    const d=await r.json();
+    r.ok?renderEvents(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
+  }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
+}
 
-                // Yükleniyor durumu
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner"></span>İşleniyor...';
-                result.style.display = 'none';
+async function loadTickets(page=1){
+  setActiveNav('navTickets');
+  document.getElementById('heroSection').style.display='none';
+  showLoad('Biletler yükleniyor...');
+  try{
+    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:{'X-Api-Key':API_KEY}});
+    const d=await r.json();
+    r.ok?renderTickets(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
+  }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
+}
 
-                try {
-                    const response = await fetch('/api/tickets', {
-                        method:  'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Api-Key':    API_KEY
-                        },
-                        body: JSON.stringify(payload)
-                    });
+// ── SUBMIT ────────────────────────────────────────────────────────────────────
+document.getElementById('ticketForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true; btn.textContent='İşleniyor...';
+  const payload={
+    EventName:   document.getElementById('fEvent').value.trim(),
+    CustomerName:document.getElementById('fCustomer').value.trim(),
+    Seat:        document.getElementById('fSeat').value.trim(),
+    Price:       parseFloat(document.getElementById('fPrice').value)||0,
+    Status:      'Active',
+    PurchaseDate:new Date().toISOString(),
+  };
+  try{
+    const r=await fetch('/api/tickets',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Api-Key':API_KEY},
+      body:JSON.stringify(payload),
+    });
+    if(r.ok){
+      closeModal();
+      launchConfetti();
+      toast('&#127881; Bilet başarıyla oluşturuldu! İyi eğlenceler.','ok');
+    } else {
+      const d=await r.json().catch(()=>({}));
+      toast(d.error||`Hata: HTTP ${r.status}`,'err');
+    }
+  }catch(err){toast('Bağlantı hatası: '+err.message,'err');}
+  finally{btn.disabled=false;btn.textContent='Satın Al →';}
+});
 
-                    const text = await response.text();
-                    let pretty;
-                    try   { pretty = JSON.stringify(JSON.parse(text), null, 2); }
-                    catch { pretty = text; }
+// ── PAGINATION ────────────────────────────────────────────────────────────────
+document.getElementById('btnPrev').onclick=()=>{if(tPage>1)loadTickets(tPage-1);};
+document.getElementById('btnNext').onclick=()=>{if(tPage<tTotal)loadTickets(tPage+1);};
 
-                    result.className = response.ok ? 'success' : 'error';
-                    document.getElementById('resultTitle').textContent =
-                        response.ok
-                            ? `Bilet Oluşturuldu! (HTTP ${response.status})`
-                            : `Hata Oluştu (HTTP ${response.status})`;
-                    document.getElementById('resultBody').textContent = pretty;
-                } catch (err) {
-                    result.className = 'error';
-                    document.getElementById('resultTitle').textContent = 'Bağlantı Hatası';
-                    document.getElementById('resultBody').textContent  = err.message;
-                } finally {
-                    result.style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = 'Bileti Satın Al';
-                    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-            });
-        </script>
-    </body>
-    </html>
-    """;
+// ── NAV BINDINGS ──────────────────────────────────────────────────────────────
+document.getElementById('navEvents').onclick=loadEvents;
+document.getElementById('navTickets').onclick=()=>loadTickets(1);
+document.getElementById('heroBrowse').onclick=loadEvents;
+document.getElementById('heroTickets').onclick=()=>loadTickets(1);
+</script>
+</body>
+</html>
+""";
 
     return Results.Content(html, "text/html; charset=utf-8", Encoding.UTF8);
 });
@@ -434,7 +768,6 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
 {
     var lowerPath = path?.ToLower() ?? "";
 
-    // Auth endpoint'i doğrudan ilet (login için kimlik doğrulama gerekmez)
     if (lowerPath.Contains("auth"))
     {
         var authUrl = isDocker
@@ -443,7 +776,6 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
         return await ForwardRequest(context, authUrl, clientFactory);
     }
 
-    // ── KİMLİK DOĞRULAMA: X-Api-Key veya JWT Bearer ──────────────────────────
     bool isAuthenticated = false;
 
     if (context.Request.Headers.TryGetValue("Authorization", out var authHeader)
@@ -464,7 +796,6 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
         }
         catch
         {
-            // MongoDB erişilemiyorsa geliştirme ortamı için geç
             isAuthenticated = true;
         }
     }
@@ -472,7 +803,6 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
     if (!isAuthenticated)
         return Results.Json(new { error = "Yetkisiz erişim! X-Api-Key veya Authorization: Bearer <token> gönder." }, statusCode: 401);
 
-    // ── HEDEF SERVİS BELİRLE ─────────────────────────────────────────────────
     string targetUrl;
 
     if (lowerPath.Contains("events"))
@@ -495,14 +825,12 @@ static async Task<IResult> ForwardRequest(HttpContext context, string targetUrl,
         var client = clientFactory.CreateClient();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-        // Query string varsa URL'e ekle
         var fullUrl = context.Request.QueryString.HasValue
             ? targetUrl + context.Request.QueryString
             : targetUrl;
 
         var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), fullUrl);
 
-        // Gövdeyi tamamen byte olarak oku (ContentLength bağımsız, StreamContent sorunlarını önler)
         if (context.Request.Method != "GET" && context.Request.Method != "DELETE")
         {
             using var ms = new MemoryStream();
