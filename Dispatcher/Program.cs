@@ -303,6 +303,23 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   color:var(--text);padding:12px 15px;font-size:.95rem;outline:none;transition:var(--tr);
 }
 .f-input:focus{border-color:var(--pink);background:rgba(255,0,128,.05);box-shadow:0 0 0 3px rgba(255,0,128,.1)}
+
+select#fEvent,
+select.f-input#fEvent{
+  background:#000 !important;
+  color:#fff;
+  border-color:rgba(255,255,255,.25);
+}
+select#fEvent:focus{
+  background:#0a0a0a !important;
+  color:#fff;
+  border-color:var(--pink);
+  box-shadow:0 0 0 3px rgba(255,0,128,.15);
+}
+select#fEvent option{
+  background:#111;
+  color:#fff;
+}
 .f-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .auth-badge{
   display:flex;align-items:center;gap:10px;
@@ -364,6 +381,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="nav-link" id="navTickets">&#127915; Biletlerim</button>
     </div>
     <a class="nav-metrics" href="/metrics" target="_blank">&#128202;</a>
+    <button class="nav-cta" id="navLogin">Giriş Yap</button>
+    <button class="nav-cta" id="navLogout" style="display:none;">Çıkış Yap</button>
     <button class="nav-cta" id="navBuy">+ Bilet Satın Al</button>
   </div>
 </nav>
@@ -421,7 +440,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <form id="ticketForm">
         <div class="f-group">
           <label class="f-label">Etkinlik Adı</label>
-          <input class="f-input" type="text" id="fEvent" placeholder="Örn: Tarkan Konseri" required>
+        <select class="f-input" id="fEvent" required>
+  <option value="">Etkinlik seçin</option>
+</select>
         </div>
         <div class="f-row">
           <div class="f-group">
@@ -446,12 +467,58 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="loginOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#128274; Giriş Yap</span>
+      <button class="modal-close" id="loginClose">&#10005;</button>
+    </div>
 
+    <div class="modal-body">
+      <form id="loginForm">
+        <div class="f-group">
+          <label class="f-label">Kullanıcı Adı</label>
+          <input class="f-input" type="text" id="loginUsername" value="admin" required>
+        </div>
+
+        <div class="f-group">
+          <label class="f-label">Şifre</label>
+          <input class="f-input" type="password" id="loginPassword" value="Bilet2026" required>
+        </div>
+
+        <button type="submit" class="modal-submit" id="loginBtn">Token Al</button>
+      </form>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
-const API_KEY = 'KingoSifre123';
 
+const API_KEY = 'KingoSifre123';
+const TOKEN_KEY = 'bilet_token';
+function setAuthUi(){
+  const token = localStorage.getItem(TOKEN_KEY);
+  const loginBtn = document.getElementById('navLogin');
+  const logoutBtn = document.getElementById('navLogout');
+
+  if(token){
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-block';
+  } else {
+    loginBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'none';
+  }
+}
+
+function getAuthHeaders(contentType = false){
+  const token = localStorage.getItem(TOKEN_KEY);
+  const h = {};
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  else h['X-Api-Key'] = API_KEY;
+  if (contentType) h['Content-Type'] = 'application/json';
+  return h;
+}
 const THEMES = [
   {bg:'linear-gradient(160deg,#1a0533,#3d0070,#6600cc)',dot:'#cc44ff',icon:'🎤',tags:['KONSER','LIVE','POP']},
   {bg:'linear-gradient(160deg,#330000,#660019,#cc0033)',dot:'#ff3366',icon:'🎸',tags:['ROCK','LIVE','18+']},
@@ -464,6 +531,25 @@ const THEMES = [
 ];
 
 let tPage=1, tTotal=0;
+let cachedEvents = [];
+/** Bilet modalında her zaman gösterilen sabit konserler + API'den gelenler (isim tekrarında API öncelikli) */
+function mergeTicketEventOptions(){
+  const defaults = [
+    { name: 'Tarkan Konseri', price: 500 },
+    { name: 'Sertab Erener Konseri', price: 450 },
+    { name: 'Sezen Aksu Konseri', price: 550 }
+  ];
+  const byName = new Map();
+  defaults.forEach(e => byName.set(e.name, { ...e }));
+  cachedEvents.forEach(e => {
+    if (!e || !e.name) return;
+    const prev = byName.get(e.name);
+    byName.set(e.name, prev
+      ? { ...prev, ...e, price: e.price != null ? e.price : prev.price }
+      : { ...e });
+  });
+  return Array.from(byName.values());
+}
 const counterIntervals=[];
 
 // ── CONFETTI ──────────────────────────────────────────────────────────────────
@@ -517,8 +603,9 @@ function toast(msg,type='ok',ms=3600){
 
 // ── MODAL ─────────────────────────────────────────────────────────────────────
 function openModal(ev='',price=''){
-  document.getElementById('fEvent').value=ev;
-  document.getElementById('fPrice').value=price;
+  populateEventOptions();
+  document.getElementById('fEvent').value = ev || '';
+  document.getElementById('fPrice').value = price || '';
   document.getElementById('mOverlay').classList.add('open');
   setTimeout(()=>document.getElementById(ev?'fCustomer':'fEvent').focus(),60);
 }
@@ -529,8 +616,41 @@ function closeModal(){
 document.getElementById('mClose').onclick=closeModal;
 document.getElementById('navBuy').onclick=()=>openModal();
 document.getElementById('mOverlay').addEventListener('click',e=>{
-  if(e.target===document.getElementById('mOverlay'))closeModal();
+  if(e.target===document.getElementById('mOverlay'))closeModal();});
+  function openLogin(){ document.getElementById('loginOverlay').classList.add('open'); }
+function closeLogin(){ document.getElementById('loginOverlay').classList.remove('open'); }
+
+document.getElementById('navLogin').onclick = openLogin;
+document.getElementById('navLogout').onclick = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  setAuthUi();
+  toast('Çıkış yapıldı', 'ok');
+};
+document.getElementById('loginClose').onclick = closeLogin;
+document.getElementById('loginOverlay').addEventListener('click', e => {
+  if (e.target.id === 'loginOverlay') closeLogin();
 });
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ Username: username, Password: password })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.token) return toast(data.error || 'Login başarısız', 'err');
+
+  localStorage.setItem(TOKEN_KEY, data.token);
+setAuthUi();
+  closeLogin();
+  toast('Giriş başarılı, JWT kaydedildi', 'ok');
+});
+
 
 // ── COUNTER ANIMATION ─────────────────────────────────────────────────────────
 function seedRng(str){
@@ -558,6 +678,32 @@ function animateCounter(el,target){
 function clearCounters(){ counterIntervals.forEach(clearInterval); counterIntervals.length=0; }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
+function populateEventOptions(){
+  const sel = document.getElementById('fEvent');
+  if(!sel) return;
+
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Etkinlik seçin</option>';
+
+  mergeTicketEventOptions().forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.name || '';
+    opt.textContent = `${e.name || 'İsimsiz Etkinlik'}${e.price != null ? ` — ${Number(e.price).toLocaleString('tr-TR')} ₺` : ''}`;
+    if (opt.value === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+const fEventEl = document.getElementById('fEvent');
+if (fEventEl) {
+  fEventEl.addEventListener('change', (e) => {
+    const selected = mergeTicketEventOptions().find(x => (x.name || '') === e.target.value);
+    if (selected && selected.price != null) {
+      document.getElementById('fPrice').value = selected.price;
+    }
+  });
+}
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtD(s,short){
   if(!s)return '—';
@@ -692,15 +838,18 @@ function renderTickets(payload){
   document.getElementById('btnNext').disabled=pg.page>=pg.totalPages;
   document.getElementById('pagination').classList.toggle('on',pg.totalPages>1);
 }
-
 // ── FETCH ─────────────────────────────────────────────────────────────────────
 async function loadEvents(){
   setActiveNav('navEvents');
   document.getElementById('heroSection').style.display='none';
   showLoad('Etkinlikler yükleniyor...');
   try{
-    const r=await fetch('/api/events',{headers:{'X-Api-Key':API_KEY}});
+    const r=await fetch('/api/events',{headers:getAuthHeaders()});
     const d=await r.json();
+    if (r.ok && Array.isArray(d?.data)) {
+      cachedEvents = d.data.map(x => x.data).filter(Boolean);
+      populateEventOptions();
+    }
     r.ok?renderEvents(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
   }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
 }
@@ -710,7 +859,7 @@ async function loadTickets(page=1){
   document.getElementById('heroSection').style.display='none';
   showLoad('Biletler yükleniyor...');
   try{
-    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:{'X-Api-Key':API_KEY}});
+    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:getAuthHeaders()});
     const d=await r.json();
     r.ok?renderTickets(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
   }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
@@ -730,10 +879,11 @@ document.getElementById('ticketForm').addEventListener('submit',async e=>{
     PurchaseDate:new Date().toISOString(),
   };
   try{
-    const r=await fetch('/api/tickets',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Api-Key':API_KEY},
-      body:JSON.stringify(payload),
-    });
+   const r=await fetch('/api/tickets',{
+  method:'POST',
+  headers:getAuthHeaders(true),
+  body:JSON.stringify(payload),
+});
     if(r.ok){
       closeModal();
       launchConfetti();
@@ -755,6 +905,7 @@ document.getElementById('navEvents').onclick=loadEvents;
 document.getElementById('navTickets').onclick=()=>loadTickets(1);
 document.getElementById('heroBrowse').onclick=loadEvents;
 document.getElementById('heroTickets').onclick=()=>loadTickets(1);
+setAuthUi();
 </script>
 </body>
 </html>

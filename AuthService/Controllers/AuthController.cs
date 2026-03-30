@@ -17,7 +17,7 @@ namespace AuthService.Controllers
 
         public AuthController(IMongoClient mongoClient, IConfiguration config)
         {
-            var database = mongoClient.GetDatabase("BiletSistemiDb");
+            var database = mongoClient.GetDatabase("AuthServiceDb");
             _usersCollection = database.GetCollection<User>("Users");
             _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
                          ?? "BiletSistemi-JWT-Gizli-Anahtar-2026-SuperSecret!";

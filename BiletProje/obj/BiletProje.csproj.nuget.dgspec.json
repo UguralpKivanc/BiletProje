@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj": {}
+    "C:\\Users\\kivan\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj": {}
   },
   "projects": {
-    "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj": {
+    "C:\\Users\\kivan\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj",
+        "projectUniqueName": "C:\\Users\\kivan\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj",
         "projectName": "BiletProje",
-        "projectPath": "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj",
-        "packagesPath": "C:\\Users\\mustke\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\mustke\\Desktop\\BiletProje\\BiletProje\\obj\\",
+        "projectPath": "C:\\Users\\kivan\\Desktop\\BiletProje\\BiletProje\\BiletProje.csproj",
+        "packagesPath": "C:\\Users\\kivan\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\kivan\\Desktop\\BiletProje\\BiletProje\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\mustke\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\kivan\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -26,7 +26,6 @@
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
