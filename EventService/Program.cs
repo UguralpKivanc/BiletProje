@@ -23,23 +23,34 @@ app.MapMetrics();       // /metrics endpoint'i
 app.MapControllers();
 
 // Seed Data
+// Seed Data
 try
 {
     var client = app.Services.GetRequiredService<IMongoClient>();
     var db = client.GetDatabase("EventServiceDb");
     var collection = db.GetCollection<BsonDocument>("Events");
 
-    if (collection.CountDocuments(new BsonDocument()) == 0)
+    var seedEvents = new[]
     {
-        var tarkan = new BsonDocument
+        new { Name = "Tarkan Konseri", Location = "Istanbul", Date = new DateTime(2026, 5, 30), Price = 500 },
+        new { Name = "Sertab Erener Konseri", Location = "Istanbul", Date = new DateTime(2026, 6, 15), Price = 450 },
+        new { Name = "Sezen Aksu Konseri", Location = "Istanbul", Date = new DateTime(2026, 7, 20), Price = 550 }
+    };
+
+    foreach (var e in seedEvents)
+    {
+        var filter = Builders<BsonDocument>.Filter.Eq("Name", e.Name);
+        if (collection.CountDocuments(filter) > 0)
+            continue;
+
+        collection.InsertOne(new BsonDocument
         {
-            { "Name", "Tarkan Konseri" },
-            { "Location", "Istanbul" },
-            { "Date", new DateTime(2026, 5, 30) },
-            { "Price", 500 }
-        };
-        collection.InsertOne(tarkan);
-        Console.WriteLine("--> AĞAM: Tarkan Konseri Veritabanına İşlendi!");
+            { "Name", e.Name },
+            { "Location", e.Location },
+            { "Date", e.Date },
+            { "Price", e.Price }
+        });
+        Console.WriteLine($"--> AĞAM: {e.Name} veritabanına işlendi!");
     }
 }
 catch (Exception ex)

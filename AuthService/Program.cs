@@ -29,7 +29,7 @@ try
     var client = app.Services.GetRequiredService<IMongoClient>();
     var db = client.GetDatabase("AuthServiceDb");
     var usersCollection = db.GetCollection<BsonDocument>("Users");
-    var apiKeysCollection = db.GetCollection<BsonDocument>("ApiKeys");
+ 
 
     if (usersCollection.CountDocuments(new BsonDocument()) == 0)
     {
@@ -44,17 +44,7 @@ try
         Console.WriteLine("--> AĞAM: Varsayılan admin kullanıcısı oluşturuldu! (admin / Bilet2026)");
     }
 
-    var keyFilter = Builders<BsonDocument>.Filter.Eq("key", "KingoSifre123");
-    var existingKey = apiKeysCollection.Find(keyFilter).FirstOrDefault();
-    if (existingKey == null)
-    {
-        apiKeysCollection.InsertOne(new BsonDocument
-        {
-            { "key", "KingoSifre123" },
-            { "isActive", true }
-        });
-        Console.WriteLine("--> AĞAM: Varsayılan API key oluşturuldu! (KingoSifre123)");
-    }
+ 
 }
 catch (Exception ex)
 {

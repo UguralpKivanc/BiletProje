@@ -19,7 +19,31 @@ var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoConn));
 
 var app = builder.Build();
+// Dispatcher seed: API key ilk açılışta yoksa oluştur
+try
+{
+    var client = app.Services.GetRequiredService<IMongoClient>();
+    var db = client.GetDatabase("DispatcherDb");
+    var apiKeys = db.GetCollection<BsonDocument>("ApiKeys");
 
+    var keyFilter = Builders<BsonDocument>.Filter.Eq("key", "KingoSifre123");
+    var existing = apiKeys.Find(keyFilter).FirstOrDefault();
+
+    if (existing == null)
+    {
+        apiKeys.InsertOne(new BsonDocument
+        {
+            { "key", "KingoSifre123" },
+            { "isActive", true }
+        });
+
+        Console.WriteLine("--> DispatcherDb: Varsayılan API key oluşturuldu (KingoSifre123)");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"--> Dispatcher seed hatası: {ex.Message}");
+}
 // ── TRAFİK LOGLAMA MIDDLEWARE ─────────────────────────────────────────────────
 app.Use(async (context, next) =>
 {
@@ -939,7 +963,7 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
     {
         try
         {
-            var db = mongoClient.GetDatabase("AuthServiceDb");
+            var db = mongoClient.GetDatabase("DispatcherDb");
             var authCollection = db.GetCollection<BsonDocument>("ApiKeys");
             var filter = Builders<BsonDocument>.Filter.Eq("key", apiKey.ToString());
             var authRecord = await authCollection.Find(filter).FirstOrDefaultAsync();
