@@ -22,7 +22,18 @@ namespace eventservice.Controllers
             var events = await _repository.GetAllAsync();
 
             if (!events.Any())
-                return Ok(new { message = "Bağlantı OK ama 'Events' içi boş görünüyor ağam!" });
+            {
+                return Ok(new
+                {
+                    message = "Bağlantı OK ama 'Events' içi boş görünüyor ağam!",
+                    data = Array.Empty<object>(),
+                    links = new[]
+                    {
+                        new HateoasLink("self", "/api/events", "GET"),
+                        new HateoasLink("create", "/api/events", "POST")
+                    }
+                });
+            }
 
             var items = events.Select(e => new
             {

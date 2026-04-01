@@ -260,6 +260,7 @@ Tüm istekler Dispatcher'a (port 5000) gönderilir.
 | Method | Endpoint | Auth | HTTP Kodu | Açıklama |
 |--------|----------|:----:|:---------:|----------|
 | POST | `/api/auth/login` | — | 200 | JWT token al |
+| POST | `/api/auth/register` | — | 201 / 400 / 409 | Yeni kullanıcı kaydı (role: user) |
 | POST | `/api/auth/validate` | — | 200 | Token doğrula |
 | GET | `/api/events` | ✓ | 200 | Tüm etkinlikler |
 | GET | `/api/events/{id}` | ✓ | 200 / 404 | Etkinlik detayı |

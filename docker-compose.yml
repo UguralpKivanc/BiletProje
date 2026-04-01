@@ -49,6 +49,7 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:5168
       - ConnectionStrings__MongoDb=mongodb://mongodb:27017
+      - JWT_SECRET=BiletSistemi-JWT-Gizli-Anahtar-2026-SuperSecret!
     depends_on:
       - mongodb
     networks:

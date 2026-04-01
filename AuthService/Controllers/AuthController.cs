@@ -33,7 +33,7 @@ namespace AuthService.Controllers
             var user = await _usersCollection.Find(filter).FirstOrDefaultAsync();
 
             if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                return Unauthorized(new { error = "Geçersiz kullanıcı adı veya şifre ağam!" });
+                return Unauthorized(new { error = "Geçersiz kullanıcı adı veya şifre" });
 
             var token = GenerateJwtToken(user);
             return Ok(new
@@ -42,6 +42,43 @@ namespace AuthService.Controllers
                 username = user.Username,
                 role = user.Role,
                 expiresIn = "24 saat"
+            });
+        }
+
+        /// <summary>
+        /// Yeni kullanıcı kaydı (rol: user)
+        /// </summary>
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+                return BadRequest(new { error = "Kullanıcı adı ve şifre zorunludur." });
+
+            var username = request.Username.Trim();
+            if (username.Length < 3)
+                return BadRequest(new { error = "Kullanıcı adı en az 3 karakter olmalıdır." });
+            if (request.Password.Length < 6)
+                return BadRequest(new { error = "Şifre en az 6 karakter olmalıdır." });
+
+            var filter = Builders<User>.Filter.Eq(u => u.Username, username);
+            if (await _usersCollection.CountDocumentsAsync(filter) > 0)
+                return Conflict(new { error = "Bu kullanıcı adı zaten kayıtlı." });
+
+            var user = new User
+            {
+                Username = username,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                Role = "user"
+            };
+
+            await _usersCollection.InsertOneAsync(user);
+
+            return StatusCode(StatusCodes.Status201Created, new
+            {
+                message = "Kayıt başarılı.",
+                username = user.Username,
+                role = user.Role,
+                id = user.Id
             });
         }
 

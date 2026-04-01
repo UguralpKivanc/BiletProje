@@ -41,7 +41,7 @@ try
             { "Role", "admin" }
         };
         usersCollection.InsertOne(admin);
-        Console.WriteLine("--> AĞAM: Varsayılan admin kullanıcısı oluşturuldu! (admin / Bilet2026)");
+        Console.WriteLine("Varsayılan admin kullanıcısı oluşturuldu! (admin / Bilet2026)");
     }
 
  

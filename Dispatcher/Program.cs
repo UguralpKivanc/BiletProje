@@ -122,12 +122,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   transition:var(--tr);white-space:nowrap;
 }
 .nav-cta:hover{box-shadow:0 0 24px rgba(255,0,128,.55),0 0 48px rgba(255,107,53,.2);transform:translateY(-1px)}
-.nav-metrics{
-  padding:8px 14px;background:none;border:1px solid var(--border);
-  border-radius:8px;color:var(--muted);font-size:.82rem;cursor:pointer;
-  text-decoration:none;transition:var(--tr);white-space:nowrap;
-}
-.nav-metrics:hover{border-color:var(--pink);color:var(--text)}
 
 /* ── HERO ── */
 .hero{
@@ -387,7 +381,6 @@ select#fEvent option{
   .hero h1{font-size:2.4rem}
   .events-grid,.tickets-grid{grid-template-columns:1fr}
   .f-row{grid-template-columns:1fr}
-  .nav-metrics{display:none}
   .modal{max-width:100%}
 }
 </style>
@@ -404,8 +397,8 @@ select#fEvent option{
       <button class="nav-link" id="navEvents">&#127908; Etkinlikler</button>
       <button class="nav-link" id="navTickets">&#127915; Biletlerim</button>
     </div>
-    <a class="nav-metrics" href="/metrics" target="_blank">&#128202;</a>
     <button class="nav-cta" id="navLogin">Giriş Yap</button>
+    <button class="nav-cta" id="navRegister" style="background:transparent;border:1px solid rgba(255,0,128,.45);box-shadow:none;">Kayıt Ol</button>
     <button class="nav-cta" id="navLogout" style="display:none;">Çıkış Yap</button>
     <button class="nav-cta" id="navBuy">+ Bilet Satın Al</button>
   </div>
@@ -483,8 +476,8 @@ select#fEvent option{
           <input class="f-input" type="number" id="fPrice" placeholder="500" min="0" required>
         </div>
         <div class="f-group">
-          <label class="f-label">Kimlik Doğrulama</label>
-          <div class="auth-badge"><span class="auth-badge-icon">&#10003;</span> X-Api-Key otomatik eklendi</div>
+          <label class="f-label">Hesap</label>
+          <div class="auth-badge" id="ticketAuthHint"><span class="auth-badge-icon">&#9888;</span> Bilet görmek ve satın almak için giriş yapın</div>
         </div>
         <button type="submit" class="modal-submit" id="submitBtn">Satın Al &#8594;</button>
       </form>
@@ -515,6 +508,31 @@ select#fEvent option{
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="registerOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#128100; Kayıt Ol</span>
+      <button class="modal-close" id="registerClose">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <form id="registerForm">
+        <div class="f-group">
+          <label class="f-label">Kullanıcı Adı</label>
+          <input class="f-input" type="text" id="regUsername" placeholder="En az 3 karakter" required minlength="3" autocomplete="username">
+        </div>
+        <div class="f-group">
+          <label class="f-label">Şifre</label>
+          <input class="f-input" type="password" id="regPassword" placeholder="En az 6 karakter" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="f-group">
+          <label class="f-label">Şifre (tekrar)</label>
+          <input class="f-input" type="password" id="regPassword2" placeholder="Tekrar girin" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="modal-submit" id="registerBtn">Hesap Oluştur</button>
+      </form>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -524,22 +542,38 @@ const TOKEN_KEY = 'bilet_token';
 function setAuthUi(){
   const token = localStorage.getItem(TOKEN_KEY);
   const loginBtn = document.getElementById('navLogin');
+  const registerBtn = document.getElementById('navRegister');
   const logoutBtn = document.getElementById('navLogout');
+  const hint = document.getElementById('ticketAuthHint');
 
   if(token){
     loginBtn.style.display = 'none';
+    if(registerBtn) registerBtn.style.display = 'none';
     logoutBtn.style.display = 'inline-block';
+    if(hint) hint.innerHTML = '<span class="auth-badge-icon">&#10003;</span> Bilet hesabınıza kaydedilecek';
   } else {
     loginBtn.style.display = 'inline-block';
+    if(registerBtn) registerBtn.style.display = 'inline-block';
     logoutBtn.style.display = 'none';
+    if(hint) hint.innerHTML = '<span class="auth-badge-icon">&#9888;</span> Bilet görmek ve satın almak için giriş yapın';
   }
 }
 
+/** Etkinlikler vb. — tarayıcıda oturum yoksa API anahtarı (herkese açık liste) */
 function getAuthHeaders(contentType = false){
   const token = localStorage.getItem(TOKEN_KEY);
   const h = {};
   if (token) h['Authorization'] = `Bearer ${token}`;
   else h['X-Api-Key'] = API_KEY;
+  if (contentType) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+/** Bilet listesi / satın alma — sadece giriş yapmış kullanıcı (JWT); API anahtarı yok */
+function getBearerHeaders(contentType = false){
+  const token = localStorage.getItem(TOKEN_KEY);
+  const h = {};
+  if (token) h['Authorization'] = `Bearer ${token}`;
   if (contentType) h['Content-Type'] = 'application/json';
   return h;
 }
@@ -641,10 +675,14 @@ document.getElementById('mClose').onclick=closeModal;
 document.getElementById('navBuy').onclick=()=>openModal();
 document.getElementById('mOverlay').addEventListener('click',e=>{
   if(e.target===document.getElementById('mOverlay'))closeModal();});
-  function openLogin(){ document.getElementById('loginOverlay').classList.add('open'); }
+function openLogin(){ document.getElementById('loginOverlay').classList.add('open'); document.getElementById('registerOverlay')?.classList.remove('open'); }
 function closeLogin(){ document.getElementById('loginOverlay').classList.remove('open'); }
 
+function openRegister(){ document.getElementById('registerOverlay').classList.add('open'); document.getElementById('loginOverlay')?.classList.remove('open'); }
+function closeRegister(){ document.getElementById('registerOverlay').classList.remove('open'); document.getElementById('registerForm')?.reset(); }
+
 document.getElementById('navLogin').onclick = openLogin;
+document.getElementById('navRegister').onclick = openRegister;
 document.getElementById('navLogout').onclick = () => {
   localStorage.removeItem(TOKEN_KEY);
   setAuthUi();
@@ -653,6 +691,39 @@ document.getElementById('navLogout').onclick = () => {
 document.getElementById('loginClose').onclick = closeLogin;
 document.getElementById('loginOverlay').addEventListener('click', e => {
   if (e.target.id === 'loginOverlay') closeLogin();
+});
+
+document.getElementById('registerClose').onclick = closeRegister;
+document.getElementById('registerOverlay').addEventListener('click', e => {
+  if (e.target.id === 'registerOverlay') closeRegister();
+});
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const password2 = document.getElementById('regPassword2').value;
+  const btn = document.getElementById('registerBtn');
+  if (password !== password2) return toast('Şifreler eşleşmiyor', 'err');
+  btn.disabled = true; btn.textContent = 'Kaydediliyor...';
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ Username: username, Password: password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast(data.error || ('Kayıt başarısız: HTTP ' + res.status), 'err');
+    closeRegister();
+    document.getElementById('loginUsername').value = username;
+    document.getElementById('loginPassword').value = '';
+    openLogin();
+    toast('Kayıt tamam. Şimdi giriş yapabilirsin.', 'ok');
+  } catch (err) {
+    toast('Bağlantı hatası: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Hesap Oluştur';
+  }
 });
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -881,9 +952,13 @@ async function loadEvents(){
 async function loadTickets(page=1){
   setActiveNav('navTickets');
   document.getElementById('heroSection').style.display='none';
+  if(!localStorage.getItem(TOKEN_KEY)){
+    showEmpty('&#128274;','Biletlerinizi görmek için giriş yapın.');
+    return;
+  }
   showLoad('Biletler yükleniyor...');
   try{
-    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:getAuthHeaders()});
+    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:getBearerHeaders()});
     const d=await r.json();
     r.ok?renderTickets(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
   }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
@@ -892,6 +967,11 @@ async function loadTickets(page=1){
 // ── SUBMIT ────────────────────────────────────────────────────────────────────
 document.getElementById('ticketForm').addEventListener('submit',async e=>{
   e.preventDefault();
+  if(!localStorage.getItem(TOKEN_KEY)){
+    toast('Bilet satın almak için önce giriş yapın','err');
+    openLogin();
+    return;
+  }
   const btn=document.getElementById('submitBtn');
   btn.disabled=true; btn.textContent='İşleniyor...';
   const payload={
@@ -905,7 +985,7 @@ document.getElementById('ticketForm').addEventListener('submit',async e=>{
   try{
    const r=await fetch('/api/tickets',{
   method:'POST',
-  headers:getAuthHeaders(true),
+  headers:getBearerHeaders(true),
   body:JSON.stringify(payload),
 });
     if(r.ok){
@@ -1005,6 +1085,11 @@ static async Task<IResult> ForwardRequest(HttpContext context, string targetUrl,
             : targetUrl;
 
         var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), fullUrl);
+
+        if (context.Request.Headers.TryGetValue("Authorization", out var authHdr))
+            request.Headers.TryAddWithoutValidation("Authorization", authHdr.ToString());
+        if (context.Request.Headers.TryGetValue("X-Api-Key", out var apiHdr))
+            request.Headers.TryAddWithoutValidation("X-Api-Key", apiHdr.ToString());
 
         if (context.Request.Method != "GET" && context.Request.Method != "DELETE")
         {
