@@ -68,7 +68,7 @@ try
             { "PurchaseDate", DateTime.UtcNow }
         };
         collection.InsertOne(sampleTicket);
-        Console.WriteLine("--> AĞAM: Örnek Bilet Verisi Veritabanına İşlendi!");
+        Console.WriteLine("--> Örnek bilet verisi veritabanına eklendi.");
     }
 }
 catch (Exception ex)

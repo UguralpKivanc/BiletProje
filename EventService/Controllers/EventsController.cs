@@ -25,7 +25,7 @@ namespace eventservice.Controllers
             {
                 return Ok(new
                 {
-                    message = "Bağlantı OK ama 'Events' içi boş görünüyor ağam!",
+                    message = "Bağlantı başarılı; henüz etkinlik kaydı yok.",
                     data = Array.Empty<object>(),
                     links = new[]
                     {

@@ -50,7 +50,7 @@ try
             { "Date", e.Date },
             { "Price", e.Price }
         });
-        Console.WriteLine($"--> AĞAM: {e.Name} veritabanına işlendi!");
+        Console.WriteLine($"--> {e.Name} veritabanına eklendi.");
     }
 }
 catch (Exception ex)
