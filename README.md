@@ -112,7 +112,7 @@ sequenceDiagram
 
     Note over C,DB: Adım 3 — Korumalı Endpoint (X-Api-Key ile)
     C->>D: POST /api/tickets [X-Api-Key: KingoSifre123]
-    D->>DB: AuthServiceDb.ApiKeys — anahtar doğrula
+    D->>DB: DispatcherDb.ApiKeys — anahtar doğrula
     DB-->>D: isActive: true
     D->>T: İlet
     T->>DB: TicketServiceDb.Tickets — kayıt oluştur
@@ -125,11 +125,11 @@ sequenceDiagram
     D-->>C: 401 Unauthorized
 ```
 
+Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak DispatcherDb ile API anahtarlarını saklar. Böylece bir servisin şema değişikliği diğerlerini doğrudan etkilemez.
+
 ---
 
 ## 4. Veritabanı Yapısı
-
-Her servis kendi MongoDB veritabanını kullanır. Bu sayede bir servisin şema değişikliği diğerlerini etkilemez.
 
 ```mermaid
 erDiagram
@@ -140,7 +140,7 @@ erDiagram
         string   Role
     }
 
-    AuthServiceDb_ApiKeys {
+    DispatcherDb_ApiKeys {
         ObjectId _id PK
         string   key
         bool     isActive
@@ -157,6 +157,7 @@ erDiagram
     TicketServiceDb_Tickets {
         ObjectId _id          PK
         string   EventName
+        string   OwnerUsername
         string   CustomerName
         string   Seat
         string   Status
@@ -164,6 +165,8 @@ erDiagram
         datetime PurchaseDate
     }
 ```
+
+OwnerUsername alanı, biletin hangi hesaba ait olduğunu gösterir (JWT içindeki kullanıcı adı). Boş olabilir: eski kayıtlar veya yalnızca API anahtarı ile oluşturulan biletler için.
 
 ---
 
@@ -342,8 +345,12 @@ Dispatcher'ın yönlendirme mantığı `Dispatcher.Tests/DispatcherRoutingTests.
 
 - `/api/events/*` isteklerinin EventService'e iletilmesi
 - `/api/tickets/*` isteklerinin TicketService'e iletilmesi
+- `GET /api/events` ve `GET /api/tickets` isteklerinde kimlik bilgisi yokken Gateway'in 401 dönmesi
+- Geçerli X-Api-Key ile geçersiz veya bilinmeyen servis yolunda 400 dönmesi
 - Kimlik doğrulama başarısız olduğunda 401 dönmesi
 - `/api/auth/*` isteklerinin kimlik doğrulama olmadan geçmesi
+
+Bu davranışlar çalışan Docker ortamında uçtan uca doğrulanır. Auth-, Event- ve TicketService için ayrı birim test projeleri bu repoda zorunlu tutulmamıştır.
 
 TDD'nin projeye katkısı şu oldu: Dispatcher'ın yönlendirme mantığını yazmadan önce beklenen davranışı test olarak tanımladık. Bu sayede yönlendirme kurallarını değiştirirken mevcut testler bizi korudu.
 
