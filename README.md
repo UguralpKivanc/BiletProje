@@ -133,7 +133,6 @@ Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak Dispatch
 ## 4. Veritabanı Yapısı
 
 
-
 ```mermaid
 erDiagram
     AuthServiceDb_Users {
@@ -170,7 +169,7 @@ erDiagram
 
 
 ```
-**OwnerUsername:** Biletin hangi hesaba ait olduğu (JWT’deki kullanıcı adı). Boş olabilir (eski kayıtlar veya yalnızca API anahtarı ile oluşturulan biletler).
+OwnerUsername alanı, biletin hangi hesaba ait olduğunu gösterir (JWT içindeki kullanıcı adı). Boş olabilir: eski kayıtlar veya yalnızca API anahtarı ile oluşturulan biletler için.
 ---
 
 ## 5. Sınıf Diyagramı
@@ -346,9 +345,16 @@ Refactor → Testi bozmadan kodu temizle
 
 Dispatcher'ın davranışı Dispatcher.Tests/DispatcherRoutingTests.cs içinde WebApplicationFactory<Program> ile entegrasyon testlerine alınmıştır. Örnek doğrulamalar:
 
-GET /api/events ve GET /api/tickets isteklerinde kimlik bilgisi yokken Gateway'in 401 dönmesi
-Geçerli X-Api-Key ile geçersiz servis yolunda 400 dönmesi
-Servislerin gerçekten Event/Ticket mikroservislerine iletilmesi çalışan Docker ortamında uçtan uca test edilir; birim düzeyinde Auth/Event/Ticket servisleri için ayrı test projeleri bu repoda zorunlu tutulmamıştır.
+ `/api/events/*` isteklerinin EventService'e iletilmesi
+- `/api/tickets/*` isteklerinin TicketService'e iletilmesi
+- `GET /api/events` ve `GET /api/tickets` isteklerinde kimlik bilgisi yokken Gateway'in 401 dönmesi
+- Geçerli X-Api-Key ile geçersiz veya bilinmeyen servis yolunda 400 dönmesi
+- Kimlik doğrulama başarısız olduğunda 401 dönmesi
+- `/api/auth/*` isteklerinin kimlik doğrulama olmadan geçmesi
+
+Bu davranışlar çalışan Docker ortamında uçtan uca doğrulanır. Auth-, Event- ve TicketService için ayrı birim test projeleri bu repoda zorunlu tutulmamıştır.
+TDD'nin projeye katkısı şu oldu: Dispatcher'ın yönlendirme mantığını yazmadan önce beklenen davranışı test olarak tanımladık. Bu sayede yönlendirme kurallarını değiştirirken mevcut testler bizi korudu.
+
 ---
 
 ## 9. Kurulum
