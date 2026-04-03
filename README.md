@@ -127,12 +127,12 @@ sequenceDiagram
     C->>D: GET /api/tickets (header yok)
     D-->>C: 401 Unauthorized
 ```
-
+Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak DispatcherDb ile API anahtarlarını saklar. Böylece bir servisin şema değişikliği diğerlerini doğrudan etkilemez.
 ---
 
 ## 4. Veritabanı Yapısı
 
-Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak DispatcherDb ile API anahtarlarını saklar. Böylece bir servisin şema değişikliği diğerlerini doğrudan etkilemez.
+
 
 ```mermaid
 erDiagram
