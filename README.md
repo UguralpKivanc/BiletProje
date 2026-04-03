@@ -128,6 +128,8 @@ sequenceDiagram
     D-->>C: 401 Unauthorized
 ```
 Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak DispatcherDb ile API anahtarlarını saklar. Böylece bir servisin şema değişikliği diğerlerini doğrudan etkilemez.
+
+
 ---
 
 ## 4. Veritabanı Yapısı
@@ -170,6 +172,8 @@ erDiagram
 
 ```
 OwnerUsername alanı, biletin hangi hesaba ait olduğunu gösterir (JWT içindeki kullanıcı adı). Boş olabilir: eski kayıtlar veya yalnızca API anahtarı ile oluşturulan biletler için.
+
+
 ---
 
 ## 5. Sınıf Diyagramı
