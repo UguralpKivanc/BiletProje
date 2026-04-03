@@ -29,7 +29,9 @@ Bu projede; her biri bağımsız deploy edilebilen, kendi veritabanını yönete
 
 ## 2. Sistem Mimarisi
 
-Sistem iki Docker ağına bölünmüştür. Dışarıdan yalnızca Dispatcher (5000) ve Grafana (3000) erişilebilir; diğer tüm servisler `internal: true` ile işaretlenmiş arka ağda çalışır.
+ Sistem iki Docker ağına bölünmüştür. **İstemci için ana giriş** `Dispatcher` (**5000**) — API ve web arayüzü; **yönetim ve pano** için **Grafana (3000)**. Bu repodaki `docker-compose.yml`, geliştirme ve izleme kolaylığı için **Prometheus (9090)** ile **MongoDB (27017)** portlarını da host makineye yönlendirir; üretimde bu portlar kapatılabilir veya kısıtlanabilir.
+**Auth**, **Event**, **Ticket** mikroservisleri ve **MongoDB** konteyner trafiği `internal: true` arka ağ üzerinden yürür; bu servislerin HTTP portları doğrudan dışarı publish edilmez. **Dispatcher** ayrıca aynı MongoDB sunucusunda **`DispatcherDb`** veritabanını (API anahtarları vb.) kullanır.
+
 
 ```mermaid
 graph TB
@@ -37,7 +39,7 @@ graph TB
         Client["İstemci\n(Browser / k6 / Postman)"]
     end
 
-    subgraph front["frontend_network — Herkese Açık"]
+    subgraph front["frontend_network — Host'a açık servisler"]
         Dispatcher["Dispatcher\nAPI Gateway · :5000"]
         Grafana["Grafana\nDashboard · :3000"]
         Prometheus["Prometheus\nMetrik Toplama · :9090"]
@@ -47,7 +49,7 @@ graph TB
         Auth["AuthService\nJWT Login · :5002"]
         Event["EventService\nEtkinlikler · :5001"]
         Ticket["TicketService\nBiletler · :5168"]
-        MongoDB[("MongoDB · :27017\nAuthServiceDb\nEventServiceDb\nTicketServiceDb")]
+        MongoDB[("MongoDB · :27017\nAuthServiceDb\nEventServiceDb\nTicketServiceDb\nDispatcherDb")]
     end
 
     Client -->|"HTTP :5000"| Dispatcher
@@ -60,6 +62,7 @@ graph TB
     Auth   --> MongoDB
     Event  --> MongoDB
     Ticket --> MongoDB
+    Dispatcher -.->|API anahtarı vb.| MongoDB
 
     Prometheus -->|"scrape /metrics"| Dispatcher
     Prometheus -->|"scrape /metrics"| Auth
@@ -74,7 +77,7 @@ graph TB
 | Katman | Teknoloji |
 |--------|-----------|
 | Çerçeve | .NET 10 — ASP.NET Core Minimal API + MVC Controllers |
-| Veritabanı | MongoDB 8 (her servise ayrı DB) |
+| Veritabanı | MongoDB 8 (her servise ayrı DB; Dispatcher için ek olarak DispatcherDb) |
 | Kimlik Doğrulama | JWT (System.IdentityModel.Tokens.Jwt) + BCrypt |
 | Orkestrasyon | Docker Compose |
 | Metrik | prometheus-net.AspNetCore + Grafana 11 |
@@ -124,6 +127,8 @@ sequenceDiagram
     C->>D: GET /api/tickets (header yok)
     D-->>C: 401 Unauthorized
 ```
+Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak DispatcherDb ile API anahtarlarını saklar. Böylece bir servisin şema değişikliği diğerlerini doğrudan etkilemez.
+
 
 Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak DispatcherDb ile API anahtarlarını saklar. Böylece bir servisin şema değişikliği diğerlerini doğrudan etkilemez.
 
@@ -131,6 +136,10 @@ Her servis kendi MongoDB veritabanını kullanır; Dispatcher ek olarak Dispatch
 
 ## 4. Veritabanı Yapısı
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> c2d3497c3976afb30448967d587f6504ab3930bf
 ```mermaid
 erDiagram
     AuthServiceDb_Users {
@@ -164,7 +173,11 @@ erDiagram
         decimal  Price
         datetime PurchaseDate
     }
+
+
 ```
+OwnerUsername alanı, biletin hangi hesaba ait olduğunu gösterir (JWT içindeki kullanıcı adı). Boş olabilir: eski kayıtlar veya yalnızca API anahtarı ile oluşturulan biletler için.
+
 
 OwnerUsername alanı, biletin hangi hesaba ait olduğunu gösterir (JWT içindeki kullanıcı adı). Boş olabilir: eski kayıtlar veya yalnızca API anahtarı ile oluşturulan biletler için.
 
@@ -255,7 +268,7 @@ classDiagram
 Tüm istekler Dispatcher'a (port 5000) gönderilir.
 
 **Kimlik doğrulama seçenekleri:**
-- `X-Api-Key: KingoSifre123`
+- `X-Api-Key: KingoSifre123 (DispatcherDb'de kayıtlı anahtar)`
 - `Authorization: Bearer <jwt_token>`
 
 `/api/auth/*` endpoint'leri için kimlik doğrulama gerekmez.
@@ -341,9 +354,9 @@ Refactor → Testi bozmadan kodu temizle
 
 ### Uygulanan Testler
 
-Dispatcher'ın yönlendirme mantığı `Dispatcher.Tests/DispatcherRoutingTests.cs` içinde test edilmiştir. Örnek senaryolar:
+Dispatcher'ın davranışı Dispatcher.Tests/DispatcherRoutingTests.cs içinde WebApplicationFactory<Program> ile entegrasyon testlerine alınmıştır. Örnek doğrulamalar:
 
-- `/api/events/*` isteklerinin EventService'e iletilmesi
+ `/api/events/*` isteklerinin EventService'e iletilmesi
 - `/api/tickets/*` isteklerinin TicketService'e iletilmesi
 - `GET /api/events` ve `GET /api/tickets` isteklerinde kimlik bilgisi yokken Gateway'in 401 dönmesi
 - Geçerli X-Api-Key ile geçersiz veya bilinmeyen servis yolunda 400 dönmesi
@@ -351,7 +364,10 @@ Dispatcher'ın yönlendirme mantığı `Dispatcher.Tests/DispatcherRoutingTests.
 - `/api/auth/*` isteklerinin kimlik doğrulama olmadan geçmesi
 
 Bu davranışlar çalışan Docker ortamında uçtan uca doğrulanır. Auth-, Event- ve TicketService için ayrı birim test projeleri bu repoda zorunlu tutulmamıştır.
+<<<<<<< HEAD
 
+=======
+>>>>>>> c2d3497c3976afb30448967d587f6504ab3930bf
 TDD'nin projeye katkısı şu oldu: Dispatcher'ın yönlendirme mantığını yazmadan önce beklenen davranışı test olarak tanımladık. Bu sayede yönlendirme kurallarını değiştirirken mevcut testler bizi korudu.
 
 ---
@@ -370,12 +386,12 @@ docker-compose up --build -d
 
 Ayağa kalktıktan sonra erişim noktaları:
 
-| Adres | Ne |
+| Adres | Amaç |
 |-------|----|
-| http://localhost:5000 | Bilet satın alma arayüzü (API Gateway) |
-| http://localhost:3000 | Grafana — admin / bilet2026 |
-| http://localhost:9090 | Prometheus |
-| http://localhost:27017 | MongoDB |
+| http://localhost:5000 | API Gateway ve bilet web arayüzü (birincil istemci girişi) |
+| http://localhost:3000 | Grafana — admin / bilet2026 (metrik panosu) |
+| http://localhost:9090 | Prometheus UI (compose ile host’a açık)|
+| http://localhost:27017 | MongoDB (compose ile host’a açık; geliştirme/yardımcı erişim) |
 
 ### Örnek İstekler
 
@@ -404,7 +420,9 @@ curl -X POST http://localhost:5000/api/tickets \
 
 ## 10. Yük Testi Sonuçları
 
-k6 ile dört farklı VU (Sanal Kullanıcı) seviyesinde stres testi yapılmıştır. Her test; 15 saniye rampa, 45 saniye sabit yük, 10 saniye düşüş aşamasından oluşur. Her iterasyonda şu 4 istek gönderilir: login, etkinlik listesi, bilet listesi, bilet oluşturma.
+Repoda k6/load-test.js bulunur. Bu script aşamalı yük kullanır (ör. 30 sn yükseliş, 1 dk sabit, kısa süreli spike, düşüş) ve her iterasyonda sırasıyla login, GET /api/events, GET /api/tickets, POST /api/tickets çağrılarını içerir.
+
+Aşağıdaki tablo farklı sanal kullanıcı (VU) seviyelerinde yapılan örnek stres testi koşularına aittir; sayılar belirli bir donanım ve ortamda alınmıştır ve load-test.js içindeki aşama süreleri ile birebir aynı parametreleri ifade etmeyebilir.
 
 | VU | Toplam İstek | İstek/sn | Hata Oranı | Ort. Süre | P95 Süre | Durum |
 |----|-------------|---------|-----------|----------|---------|-------|
@@ -422,7 +440,7 @@ k6 ile dört farklı VU (Sanal Kullanıcı) seviyesinde stres testi yapılmışt
 ### Başarılar
 
 - Dört bağımsız mikroservis Docker Compose ile tek komutla ayağa kaldırılabiliyor
-- Servisler arası ağ izolasyonu sağlandı; yalnızca Dispatcher ve Grafana dışarıya açık
+- Mikroservisler iç ağda; ana kullanıcı uçları 5000 ve 3000; Prometheus ve MongoDB portları bu compose’ta ek olarak host’a yönlendirilmiş
 - REST API'ler Richardson Olgunluk Modeli'nin 3. seviyesine (HATEOAS) taşındı
 - Her servis kendi MongoDB veritabanını kullandığından şema değişiklikleri izole kalıyor
 - Prometheus + Grafana ile tüm servislerin HTTP metrikleri tek panelden izlenebiliyor
