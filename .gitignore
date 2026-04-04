@@ -7,7 +7,3 @@
 *.sqlite
 BiletProje/.vs/BiletProje/DesignTimeBuild/.dtbcache.v2
 /BiletProje/.vs
-
-# Geliştirme araçları
-.claude/
-CLAUDE.md

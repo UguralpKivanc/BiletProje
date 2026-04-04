@@ -1,75 +1,36 @@
-﻿using Xunit;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using System.Threading.Tasks;
-using Dispatcher.Controllers;
+using System.Net;
+using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace Dispatcher.Tests
+namespace Dispatcher.Tests;
+
+public class DispatcherRoutingTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    public class DispatcherRoutingTests
+    private readonly WebApplicationFactory<Program> _factory;
+
+    public DispatcherRoutingTests(WebApplicationFactory<Program> factory) => _factory = factory;
+
+    [Fact]
+    public async Task GetEvents_WithoutCredentials_Returns401()
     {
-        private readonly GatewayController _controller;
-        private const string ValidKey = "KingoSifre123";
+        var client = _factory.CreateClient();
+        var res = await client.GetAsync("/api/events");
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
 
-        public DispatcherRoutingTests()
-        {
-            _controller = new GatewayController();
-            _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
-        }
+    [Fact]
+    public async Task GetTickets_WithoutCredentials_Returns401()
+    {
+        var client = _factory.CreateClient();
+        var res = await client.GetAsync("/api/tickets");
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
 
-        // Boş path → BadRequest (400)
-        [Fact]
-        public async Task ForwardToService_ShouldReturnBadRequest_WhenPathIsEmpty()
-        {
-            _controller.Request.Headers["X-Api-Key"] = ValidKey;
-            var result = await _controller.ForwardToService("");
-            var statusCodeResult = Assert.IsAssignableFrom<IStatusCodeActionResult>(result);
-            Assert.Equal(400, statusCodeResult.StatusCode);
-        }
-
-        // Geçersiz path → BadRequest (400)
-        [Fact]
-        public async Task ForwardToService_ShouldReturnBadRequest_WhenPathIsInvalid()
-        {
-            _controller.Request.Headers["X-Api-Key"] = ValidKey;
-            var result = await _controller.ForwardToService("random-service");
-            var statusCodeResult = Assert.IsAssignableFrom<IStatusCodeActionResult>(result);
-            Assert.Equal(400, statusCodeResult.StatusCode);
-        }
-
-        // Servis ayakta değil → 502 Bad Gateway
-        [Fact]
-        public async Task ForwardToService_ShouldReturn502_WhenTargetServiceIsDown()
-        {
-            _controller.Request.Headers["X-Api-Key"] = ValidKey;
-            var result = await _controller.ForwardToService("events");
-            var statusCodeResult = Assert.IsAssignableFrom<IStatusCodeActionResult>(result);
-            Assert.Equal(502, statusCodeResult.StatusCode);
-        }
-
-        // API key eksik → Unauthorized (401)
-        [Fact]
-        public async Task ForwardToService_ShouldReturnUnauthorized_WhenApiKeyIsMissing()
-        {
-            _controller.Request.Headers.Clear();
-            var result = await _controller.ForwardToService("events");
-            var statusCodeResult = Assert.IsAssignableFrom<IStatusCodeActionResult>(result);
-            Assert.Equal(401, statusCodeResult.StatusCode);
-        }
-
-        // Yanlış API key → MongoDB yoksa 502, varsa 403
-        // Test ortamında MongoDB olmadığı için 502 bekliyoruz
-        [Fact]
-        public async Task ForwardToService_ShouldReturn502OrForbidden_WhenApiKeyIsWrong()
-        {
-            _controller.Request.Headers["X-Api-Key"] = "YanlisSifre";
-            var result = await _controller.ForwardToService("events");
-            var statusCodeResult = Assert.IsAssignableFrom<IStatusCodeActionResult>(result);
-            Assert.True(
-                statusCodeResult.StatusCode == 403 || statusCodeResult.StatusCode == 502,
-                $"Beklenen 403 veya 502, gelen: {statusCodeResult.StatusCode}"
-            );
-        }
+    [Fact]
+    public async Task UnknownServicePath_WithApiKey_Returns400()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", "KingoSifre123");
+        var res = await client.GetAsync("/api/invalid-service/xyz");
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
 }

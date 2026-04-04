@@ -17,11 +17,14 @@ namespace TicketService.Repositories
         public async Task<List<Ticket>> GetAllAsync()
             => await _collection.Find(new BsonDocument()).ToListAsync();
 
-        public async Task<(List<Ticket> Items, long TotalCount)> GetPagedAsync(int page, int pageSize)
+        public async Task<(List<Ticket> Items, long TotalCount)> GetPagedAsync(int page, int pageSize, string? ownerUsernameFilter = null)
         {
-            var filter = new BsonDocument();
-            var total  = await _collection.CountDocumentsAsync(filter);
-            var items  = await _collection.Find(filter)
+            FilterDefinition<Ticket> filter = ownerUsernameFilter is null
+                ? Builders<Ticket>.Filter.Empty
+                : Builders<Ticket>.Filter.Eq(t => t.OwnerUsername, ownerUsernameFilter);
+
+            var total = await _collection.CountDocumentsAsync(filter);
+            var items = await _collection.Find(filter)
                 .SortByDescending(t => t.PurchaseDate)
                 .Skip((page - 1) * pageSize)
                 .Limit(pageSize)

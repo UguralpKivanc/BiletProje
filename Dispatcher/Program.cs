@@ -19,8 +19,31 @@ var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoConn));
 
 var app = builder.Build();
+// Dispatcher seed: API key ilk açılışta yoksa oluştur
+try
+{
+    var client = app.Services.GetRequiredService<IMongoClient>();
+    var db = client.GetDatabase("DispatcherDb");
+    var apiKeys = db.GetCollection<BsonDocument>("ApiKeys");
 
-// ── TRAFİK LOGLAMA MIDDLEWARE ─────────────────────────────────────────────────
+    var keyFilter = Builders<BsonDocument>.Filter.Eq("key", "KingoSifre123");
+    var existing = apiKeys.Find(keyFilter).FirstOrDefault();
+
+    if (existing == null)
+    {
+        apiKeys.InsertOne(new BsonDocument
+        {
+            { "key", "KingoSifre123" },
+            { "isActive", true }
+        });
+
+        Console.WriteLine("--> DispatcherDb: Varsayılan API key oluşturuldu (KingoSifre123)");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"--> Dispatcher seed hatası: {ex.Message}");
+}
 app.Use(async (context, next) =>
 {
     var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
@@ -34,11 +57,9 @@ app.Use(async (context, next) =>
         context.Request.Method, context.Request.Path, context.Response.StatusCode, sw.ElapsedMilliseconds);
 });
 
-// ── PROMETHEUS METRİKLERİ ─────────────────────────────────────────────────────
 app.UseHttpMetrics();
 app.MapMetrics();
 
-// ── ANA SAYFA ─────────────────────────────────────────────────────────────────
 app.MapGet("/", () =>
 {
     var html = """
@@ -61,9 +82,6 @@ app.MapGet("/", () =>
 }
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
-
-/* ── CONFETTI ── */
-#confetti{position:fixed;inset:0;pointer-events:none;z-index:9999;display:none}
 
 /* ── NAVBAR ── */
 .navbar{
@@ -98,12 +116,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   transition:var(--tr);white-space:nowrap;
 }
 .nav-cta:hover{box-shadow:0 0 24px rgba(255,0,128,.55),0 0 48px rgba(255,107,53,.2);transform:translateY(-1px)}
-.nav-metrics{
-  padding:8px 14px;background:none;border:1px solid var(--border);
-  border-radius:8px;color:var(--muted);font-size:.82rem;cursor:pointer;
-  text-decoration:none;transition:var(--tr);white-space:nowrap;
-}
-.nav-metrics:hover{border-color:var(--pink);color:var(--text)}
 
 /* ── HERO ── */
 .hero{
@@ -303,6 +315,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   color:var(--text);padding:12px 15px;font-size:.95rem;outline:none;transition:var(--tr);
 }
 .f-input:focus{border-color:var(--pink);background:rgba(255,0,128,.05);box-shadow:0 0 0 3px rgba(255,0,128,.1)}
+
+.f-input[readonly]{opacity:.75;cursor:default;background:var(--s2)}
+.f-input[readonly]:focus{border-color:var(--border);background:var(--s2);box-shadow:none}
+.seat-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin-top:4px}
+.seat-btn{
+  aspect-ratio:1;background:var(--s3);border:1px solid var(--border);border-radius:5px;
+  color:var(--muted);font-size:.6rem;font-weight:700;cursor:pointer;transition:var(--tr);padding:0;
+}
+.seat-btn:hover{border-color:var(--pink);color:var(--text)}
+.seat-btn.selected{background:rgba(255,0,128,.25);border-color:var(--pink);color:#fff;box-shadow:0 0 8px rgba(255,0,128,.3)}
 .f-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .auth-badge{
   display:flex;align-items:center;gap:10px;
@@ -318,6 +340,33 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 }
 .modal-submit:hover{box-shadow:0 0 28px rgba(255,0,128,.55);transform:translateY(-1px)}
 .modal-submit:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+
+.modal.modal-admin{max-width:min(980px,96vw);max-height:min(92vh,900px);display:flex;flex-direction:column}
+.ap-panels{flex:1;overflow-y:auto;padding:22px 24px 28px}
+.api-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.api-action-btn{
+  display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;
+  border:1px solid var(--border);background:var(--s3);color:var(--text);
+  font-size:.82rem;font-weight:700;cursor:pointer;transition:var(--tr);
+}
+.api-action-btn:hover{border-color:var(--pink);box-shadow:0 0 18px rgba(255,0,128,.2)}
+.api-action-btn .meth{
+  font-family:ui-monospace,Consolas,monospace;font-size:.68rem;font-weight:800;
+  padding:3px 7px;border-radius:5px;background:rgba(255,0,128,.2);color:#ff88cc;
+}
+.api-action-btn.m-key .meth{background:rgba(255,200,0,.15);color:#ffd080}
+.api-json-out{
+  margin:0;padding:16px;border-radius:12px;background:#070708;border:1px solid var(--border);
+  font-family:ui-monospace,Consolas,monospace;font-size:.72rem;line-height:1.5;color:#c8e0c8;
+  white-space:pre-wrap;word-break:break-word;max-height:min(42vh,380px);overflow:auto;
+}
+.api-json-meta{font-size:.75rem;color:var(--muted);margin-bottom:8px}
+.nav-admin{
+  display:none;
+  background:linear-gradient(135deg,rgba(255,200,80,.15),rgba(255,0,128,.12)) !important;
+  border:1px solid rgba(255,200,100,.35) !important;
+  box-shadow:0 0 20px rgba(255,180,60,.12) !important;
+}
 
 /* ── TOAST ── */
 .toast{
@@ -346,14 +395,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   .hero h1{font-size:2.4rem}
   .events-grid,.tickets-grid{grid-template-columns:1fr}
   .f-row{grid-template-columns:1fr}
-  .nav-metrics{display:none}
   .modal{max-width:100%}
 }
 </style>
 </head>
 <body>
-
-<canvas id="confetti"></canvas>
 
 <!-- NAVBAR -->
 <nav class="navbar">
@@ -363,7 +409,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="nav-link" id="navEvents">&#127908; Etkinlikler</button>
       <button class="nav-link" id="navTickets">&#127915; Biletlerim</button>
     </div>
-    <a class="nav-metrics" href="/metrics" target="_blank">&#128202;</a>
+    <button class="nav-cta" id="navLogin">Giriş Yap</button>
+    <button class="nav-cta" id="navRegister" style="background:transparent;border:1px solid rgba(255,0,128,.45);box-shadow:none;">Kayıt Ol</button>
+    <button class="nav-cta" id="navLogout" style="display:none;">Çıkış Yap</button>
+    <button class="nav-cta nav-admin" id="navAdminPanel" type="button" style="display:none;">&#9881; Yönetim</button>
     <button class="nav-cta" id="navBuy">+ Bilet Satın Al</button>
   </div>
 </nav>
@@ -421,37 +470,152 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <form id="ticketForm">
         <div class="f-group">
           <label class="f-label">Etkinlik Adı</label>
-          <input class="f-input" type="text" id="fEvent" placeholder="Örn: Tarkan Konseri" required>
-        </div>
-        <div class="f-row">
-          <div class="f-group">
-            <label class="f-label">Müşteri Adı</label>
-            <input class="f-input" type="text" id="fCustomer" placeholder="Ad Soyad" required>
-          </div>
-          <div class="f-group">
-            <label class="f-label">Koltuk</label>
-            <input class="f-input" type="text" id="fSeat" placeholder="A-12" required>
-          </div>
+          <input class="f-input" type="text" id="fEvent" readonly required placeholder="Karttan seçin">
         </div>
         <div class="f-group">
           <label class="f-label">Fiyat (TL)</label>
-          <input class="f-input" type="number" id="fPrice" placeholder="500" min="0" required>
+          <input class="f-input" type="number" id="fPrice" readonly required>
         </div>
         <div class="f-group">
-          <label class="f-label">Kimlik Doğrulama</label>
-          <div class="auth-badge"><span class="auth-badge-icon">&#10003;</span> X-Api-Key otomatik eklendi</div>
+          <label class="f-label">Müşteri Adı</label>
+          <input class="f-input" type="text" id="fCustomer" placeholder="Ad Soyad" required>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Koltuk Seçin</label>
+          <div class="seat-grid" id="seatGrid"></div>
+          <input type="hidden" id="fSeat">
         </div>
         <button type="submit" class="modal-submit" id="submitBtn">Satın Al &#8594;</button>
       </form>
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="loginOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#128274; Giriş Yap</span>
+      <button class="modal-close" id="loginClose">&#10005;</button>
+    </div>
 
+    <div class="modal-body">
+      <form id="loginForm">
+        <div class="f-group">
+          <label class="f-label">Kullanıcı Adı</label>
+          <input class="f-input" type="text" id="loginUsername" value="admin" required>
+        </div>
+
+        <div class="f-group">
+          <label class="f-label">Şifre</label>
+          <input class="f-input" type="password" id="loginPassword" value="Bilet2026" required>
+        </div>
+
+        <button type="submit" class="modal-submit" id="loginBtn">Token Al</button>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="registerOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#128100; Kayıt Ol</span>
+      <button class="modal-close" id="registerClose">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <form id="registerForm">
+        <div class="f-group">
+          <label class="f-label">Kullanıcı Adı</label>
+          <input class="f-input" type="text" id="regUsername" placeholder="En az 3 karakter" required minlength="3" autocomplete="username">
+        </div>
+        <div class="f-group">
+          <label class="f-label">Şifre</label>
+          <input class="f-input" type="password" id="regPassword" placeholder="En az 6 karakter" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="f-group">
+          <label class="f-label">Şifre (tekrar)</label>
+          <input class="f-input" type="password" id="regPassword2" placeholder="Tekrar girin" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="modal-submit" id="registerBtn">Hesap Oluştur</button>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="adminOverlay">
+  <div class="modal modal-admin">
+    <div class="modal-header">
+      <span class="modal-title">&#9881; API konsolu</span>
+      <button class="modal-close" id="adminClose" type="button">&#10005;</button>
+    </div>
+    <div class="ap-panels">
+      <p class="api-json-meta">İstekler bu tarayıcıdaki oturum (JWT) veya anahtar ile gider; yanıt aşağıda görünür.</p>
+      <div class="api-toolbar">
+        <button type="button" class="api-action-btn" id="admGetEvents"><span class="meth">GET</span> /api/events</button>
+        <button type="button" class="api-action-btn" id="admGetTickets"><span class="meth">GET</span> /api/tickets</button>
+        <button type="button" class="api-action-btn m-key" id="admGetTicketsKey"><span class="meth">GET</span> Biletler (API key)</button>
+        <button type="button" class="api-action-btn" id="admPostValidate"><span class="meth">POST</span> /api/auth/validate</button>
+        <button type="button" class="api-action-btn" id="admPostTicket"><span class="meth">POST</span> /api/tickets</button>
+      </div>
+      <div class="api-json-meta" id="adminApiMeta"></div>
+      <pre class="api-json-out" id="adminApiOut">Henüz istek yok. Yukarıdan bir işlem seçin.</pre>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
-const API_KEY = 'KingoSifre123';
 
+const API_KEY = 'KingoSifre123';
+const TOKEN_KEY = 'bilet_token';
+const ROLE_KEY = 'bilet_role';
+
+function parseJwtRole(token){
+  try{
+    const p=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return p.role||p['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']||'';
+  }catch{ return ''; }
+}
+function getStoredRole(){
+  let r=localStorage.getItem(ROLE_KEY)||'';
+  const t=localStorage.getItem(TOKEN_KEY);
+  if(!r&&t) r=parseJwtRole(t);
+  return r;
+}
+function isAdminUser(){ return getStoredRole()==='admin'; }
+
+function setAuthUi(){
+  const token = localStorage.getItem(TOKEN_KEY);
+  const loginBtn = document.getElementById('navLogin');
+  const registerBtn = document.getElementById('navRegister');
+  const logoutBtn = document.getElementById('navLogout');
+  const adminBtn = document.getElementById('navAdminPanel');
+  if(token){
+    loginBtn.style.display = 'none';
+    if(registerBtn) registerBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-block';
+    if(adminBtn) adminBtn.style.display = isAdminUser() ? 'inline-block' : 'none';
+  } else {
+    loginBtn.style.display = 'inline-block';
+    if(registerBtn) registerBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'none';
+    if(adminBtn) adminBtn.style.display = 'none';
+  }
+}
+
+function getAuthHeaders(contentType = false){
+  const token = localStorage.getItem(TOKEN_KEY);
+  const h = {};
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  else h['X-Api-Key'] = API_KEY;
+  if (contentType) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+function getBearerHeaders(contentType = false){
+  const token = localStorage.getItem(TOKEN_KEY);
+  const h = {};
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  if (contentType) h['Content-Type'] = 'application/json';
+  return h;
+}
 const THEMES = [
   {bg:'linear-gradient(160deg,#1a0533,#3d0070,#6600cc)',dot:'#cc44ff',icon:'🎤',tags:['KONSER','LIVE','POP']},
   {bg:'linear-gradient(160deg,#330000,#660019,#cc0033)',dot:'#ff3366',icon:'🎸',tags:['ROCK','LIVE','18+']},
@@ -464,75 +628,199 @@ const THEMES = [
 ];
 
 let tPage=1, tTotal=0;
+let cachedEvents = [];
+function mergeTicketEventOptions(){
+  const defaults = [
+    { name: 'Tarkan Konseri', price: 500 },
+    { name: 'Sertab Erener Konseri', price: 450 },
+    { name: 'Sezen Aksu Konseri', price: 550 }
+  ];
+  const byName = new Map();
+  defaults.forEach(e => byName.set(e.name, { ...e }));
+  cachedEvents.forEach(e => {
+    if (!e || !e.name) return;
+    const prev = byName.get(e.name);
+    byName.set(e.name, prev
+      ? { ...prev, ...e, price: e.price != null ? e.price : prev.price }
+      : { ...e });
+  });
+  return Array.from(byName.values());
+}
 const counterIntervals=[];
 
-// ── CONFETTI ──────────────────────────────────────────────────────────────────
-function launchConfetti(){
-  const cv=document.getElementById('confetti');
-  cv.style.display='block';
-  cv.width=innerWidth; cv.height=innerHeight;
-  const ctx=cv.getContext('2d');
-  const cols=['#ff0080','#ff6b35','#ffd700','#00ff88','#00bfff','#ff4500','#ff69b4','#adff2f'];
-  const pieces=Array.from({length:180},()=>({
-    x:innerWidth*(.3+Math.random()*.4),
-    y:-10,
-    vx:(Math.random()-.5)*12,
-    vy:Math.random()*-8-4,
-    w:Math.random()*12+5,
-    h:Math.random()*6+3,
-    col:cols[Math.floor(Math.random()*cols.length)],
-    rot:Math.random()*360,
-    rv:(Math.random()-.5)*10,
-    grav:.38+Math.random()*.2,
-    a:1,
-  }));
-  let f=0;
-  function draw(){
-    ctx.clearRect(0,0,cv.width,cv.height);
-    let live=false;
-    pieces.forEach(p=>{
-      p.x+=p.vx; p.y+=p.vy; p.vy+=p.grav;
-      p.rot+=p.rv; p.vx*=.99;
-      if(p.y<cv.height+20) p.a=Math.max(0,1-f/160);
-      if(p.a>0){live=true;
-        ctx.save();ctx.globalAlpha=p.a;
-        ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);
-        ctx.fillStyle=p.col;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
-        ctx.restore();
-      }
-    });
-    f++;
-    if(f<200&&live) requestAnimationFrame(draw);
-    else cv.style.display='none';
-  }
-  draw();
-}
-
-// ── TOAST ─────────────────────────────────────────────────────────────────────
 function toast(msg,type='ok',ms=3600){
   const el=document.getElementById('toast');
   el.textContent=msg; el.className=`toast ${type} on`;
   clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),ms);
 }
 
-// ── MODAL ─────────────────────────────────────────────────────────────────────
 function openModal(ev='',price=''){
-  document.getElementById('fEvent').value=ev;
-  document.getElementById('fPrice').value=price;
+  document.getElementById('fEvent').value = ev || '';
+  document.getElementById('fPrice').value = price || '';
+  document.getElementById('fSeat').value = '';
+  document.querySelectorAll('.seat-btn.selected').forEach(b=>b.classList.remove('selected'));
   document.getElementById('mOverlay').classList.add('open');
-  setTimeout(()=>document.getElementById(ev?'fCustomer':'fEvent').focus(),60);
+  setTimeout(()=>document.getElementById('fCustomer').focus(),60);
 }
 function closeModal(){
   document.getElementById('mOverlay').classList.remove('open');
   document.getElementById('ticketForm').reset();
 }
 document.getElementById('mClose').onclick=closeModal;
+
+// Build A1-F10 seat grid once on load
+(function initSeatGrid(){
+  const grid=document.getElementById('seatGrid');
+  if(!grid)return;
+  ['A','B','C','D','E','F'].forEach(r=>{
+    for(let c=1;c<=10;c++){
+      const id=r+c;
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='seat-btn';
+      btn.textContent=id;
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('.seat-btn.selected').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        document.getElementById('fSeat').value=id;
+      });
+      grid.appendChild(btn);
+    }
+  });
+})();
+
 document.getElementById('navBuy').onclick=()=>openModal();
 document.getElementById('mOverlay').addEventListener('click',e=>{
-  if(e.target===document.getElementById('mOverlay'))closeModal();
+  if(e.target===document.getElementById('mOverlay'))closeModal();});
+function openLogin(){ document.getElementById('loginOverlay').classList.add('open'); document.getElementById('registerOverlay')?.classList.remove('open'); }
+function closeLogin(){ document.getElementById('loginOverlay').classList.remove('open'); }
+
+function openRegister(){ document.getElementById('registerOverlay').classList.add('open'); document.getElementById('loginOverlay')?.classList.remove('open'); }
+function closeRegister(){ document.getElementById('registerOverlay').classList.remove('open'); document.getElementById('registerForm')?.reset(); }
+
+document.getElementById('navLogin').onclick = openLogin;
+document.getElementById('navRegister').onclick = openRegister;
+document.getElementById('navLogout').onclick = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ROLE_KEY);
+  document.getElementById('adminOverlay')?.classList.remove('open');
+  setAuthUi();
+  toast('Çıkış yapıldı', 'ok');
+};
+document.getElementById('loginClose').onclick = closeLogin;
+document.getElementById('loginOverlay').addEventListener('click', e => {
+  if (e.target.id === 'loginOverlay') closeLogin();
 });
 
-// ── COUNTER ANIMATION ─────────────────────────────────────────────────────────
+document.getElementById('registerClose').onclick = closeRegister;
+document.getElementById('registerOverlay').addEventListener('click', e => {
+  if (e.target.id === 'registerOverlay') closeRegister();
+});
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const password2 = document.getElementById('regPassword2').value;
+  const btn = document.getElementById('registerBtn');
+  if (password !== password2) return toast('Şifreler eşleşmiyor', 'err');
+  btn.disabled = true; btn.textContent = 'Kaydediliyor...';
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ Username: username, Password: password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast(data.error || ('Kayıt başarısız: HTTP ' + res.status), 'err');
+    closeRegister();
+    document.getElementById('loginUsername').value = username;
+    document.getElementById('loginPassword').value = '';
+    openLogin();
+    toast('Kayıt tamam. Şimdi giriş yapabilirsin.', 'ok');
+  } catch (err) {
+    toast('Bağlantı hatası: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Hesap Oluştur';
+  }
+});
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ Username: username, Password: password })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.token) return toast(data.error || 'Login başarısız', 'err');
+
+  localStorage.setItem(TOKEN_KEY, data.token);
+  localStorage.setItem(ROLE_KEY, data.role || parseJwtRole(data.token) || '');
+  setAuthUi();
+  closeLogin();
+  toast('Giriş başarılı, JWT kaydedildi', 'ok');
+});
+
+function adminFetch(label,url,init){
+  const meta=document.getElementById('adminApiMeta');
+  const out=document.getElementById('adminApiOut');
+  meta.textContent='İstek gönderiliyor…';
+  out.textContent='';
+  fetch(url,init).then(async r=>{
+    const raw=await r.text();
+    let pretty=raw;
+    try{pretty=JSON.stringify(JSON.parse(raw),null,2);}catch{}
+    meta.textContent=label+' — HTTP '+r.status+' '+r.statusText;
+    out.textContent=pretty;
+  }).catch(e=>{
+    meta.textContent=label+' — Ağ hatası';
+    out.textContent=e.message||String(e);
+  });
+}
+document.getElementById('navAdminPanel').onclick=()=>{
+  if(!isAdminUser()) return toast('Bu alan yalnızca yöneticiler içindir','err');
+  document.getElementById('adminOverlay').classList.add('open');
+};
+document.getElementById('adminClose').onclick=()=>document.getElementById('adminOverlay').classList.remove('open');
+document.getElementById('adminOverlay').addEventListener('click',e=>{
+  if(e.target.id==='adminOverlay')document.getElementById('adminOverlay').classList.remove('open');
+});
+document.getElementById('admGetEvents').onclick=()=>
+  adminFetch('GET /api/events','/api/events',{headers:getAuthHeaders()});
+document.getElementById('admGetTickets').onclick=()=>
+  adminFetch('GET /api/tickets','/api/tickets?page=1&pageSize=10',{headers:getBearerHeaders()});
+document.getElementById('admGetTicketsKey').onclick=()=>
+  adminFetch('GET /api/tickets (yalnızca X-Api-Key)','/api/tickets?page=1&pageSize=10',{headers:{'X-Api-Key':API_KEY}});
+document.getElementById('admPostValidate').onclick=()=>{
+  const t=localStorage.getItem(TOKEN_KEY);
+  if(!t)return toast('Önce giriş yapın','err');
+  adminFetch('POST /api/auth/validate','/api/auth/validate',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:t})
+  });
+};
+document.getElementById('admPostTicket').onclick=()=>{
+  if(!localStorage.getItem(TOKEN_KEY))return toast('Önce giriş yapın','err');
+  adminFetch('POST /api/tickets','/api/tickets',{
+    method:'POST',
+    headers:getBearerHeaders(true),
+    body:JSON.stringify({
+      eventName:'Yönetim paneli testi',
+      customerName:'Admin',
+      seat:'ADM-1',
+      status:'Active',
+      price:1,
+      purchaseDate:new Date().toISOString()
+    })
+  });
+};
+
 function seedRng(str){
   let h=5381; for(let c of str) h=((h<<5)+h)+c.charCodeAt(0); return Math.abs(h);
 }
@@ -557,7 +845,23 @@ function animateCounter(el,target){
 
 function clearCounters(){ counterIntervals.forEach(clearInterval); counterIntervals.length=0; }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+function populateEventOptions(){
+  const sel = document.getElementById('fEvent');
+  if(!sel) return;
+
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Etkinlik seçin</option>';
+
+  mergeTicketEventOptions().forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.name || '';
+    opt.textContent = `${e.name || 'İsimsiz Etkinlik'}${e.price != null ? ` — ${Number(e.price).toLocaleString('tr-TR')} ₺` : ''}`;
+    if (opt.value === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtD(s,short){
   if(!s)return '—';
@@ -583,7 +887,6 @@ function showEmpty(ico,msg){
   document.getElementById('pagination').classList.remove('on');
 }
 
-// ── BARCODE SVG ───────────────────────────────────────────────────────────────
 function barcode(id){
   const seed=seedRng(id||'x');
   let bars='';
@@ -595,7 +898,6 @@ function barcode(id){
   return `<svg width="232" height="28" viewBox="0 0 232 28">${bars}</svg>`;
 }
 
-// ── RENDER EVENTS ─────────────────────────────────────────────────────────────
 function renderEvents(payload){
   clearCounters();
   const rows=payload.data;
@@ -649,7 +951,6 @@ function renderEvents(payload){
   });
 }
 
-// ── RENDER TICKETS ────────────────────────────────────────────────────────────
 function renderTickets(payload){
   clearCounters();
   const pg=payload.pagination;
@@ -692,15 +993,16 @@ function renderTickets(payload){
   document.getElementById('btnNext').disabled=pg.page>=pg.totalPages;
   document.getElementById('pagination').classList.toggle('on',pg.totalPages>1);
 }
-
-// ── FETCH ─────────────────────────────────────────────────────────────────────
 async function loadEvents(){
   setActiveNav('navEvents');
   document.getElementById('heroSection').style.display='none';
   showLoad('Etkinlikler yükleniyor...');
   try{
-    const r=await fetch('/api/events',{headers:{'X-Api-Key':API_KEY}});
+    const r=await fetch('/api/events',{headers:getAuthHeaders()});
     const d=await r.json();
+    if (r.ok && Array.isArray(d?.data)) {
+      cachedEvents = d.data.map(x => x.data).filter(Boolean);
+    }
     r.ok?renderEvents(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
   }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
 }
@@ -708,35 +1010,42 @@ async function loadEvents(){
 async function loadTickets(page=1){
   setActiveNav('navTickets');
   document.getElementById('heroSection').style.display='none';
+  if(!localStorage.getItem(TOKEN_KEY)){
+    showEmpty('&#128274;','Biletlerinizi görmek için giriş yapın.');
+    return;
+  }
   showLoad('Biletler yükleniyor...');
   try{
-    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:{'X-Api-Key':API_KEY}});
+    const r=await fetch(`/api/tickets?page=${page}&pageSize=10`,{headers:getBearerHeaders()});
     const d=await r.json();
     r.ok?renderTickets(d):showEmpty('&#9888;',d.error||`HTTP ${r.status}`);
   }catch(e){showEmpty('&#9888;','Bağlantı hatası: '+e.message);}
 }
 
-// ── SUBMIT ────────────────────────────────────────────────────────────────────
 document.getElementById('ticketForm').addEventListener('submit',async e=>{
   e.preventDefault();
+  const customerName=document.getElementById('fCustomer').value.trim();
+  if(!customerName){toast('Müşteri adı zorunludur','err');return;}
+  const seat=document.getElementById('fSeat').value;
+  if(!seat){toast('Lütfen bir koltuk seçin','err');return;}
   const btn=document.getElementById('submitBtn');
   btn.disabled=true; btn.textContent='İşleniyor...';
   const payload={
     EventName:   document.getElementById('fEvent').value.trim(),
-    CustomerName:document.getElementById('fCustomer').value.trim(),
-    Seat:        document.getElementById('fSeat').value.trim(),
+    CustomerName: customerName,
+    Seat:        seat,
     Price:       parseFloat(document.getElementById('fPrice').value)||0,
     Status:      'Active',
     PurchaseDate:new Date().toISOString(),
   };
   try{
     const r=await fetch('/api/tickets',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Api-Key':API_KEY},
+      method:'POST',
+      headers:getAuthHeaders(true),
       body:JSON.stringify(payload),
     });
     if(r.ok){
       closeModal();
-      launchConfetti();
       toast('&#127881; Bilet başarıyla oluşturuldu! İyi eğlenceler.','ok');
     } else {
       const d=await r.json().catch(()=>({}));
@@ -746,15 +1055,14 @@ document.getElementById('ticketForm').addEventListener('submit',async e=>{
   finally{btn.disabled=false;btn.textContent='Satın Al →';}
 });
 
-// ── PAGINATION ────────────────────────────────────────────────────────────────
 document.getElementById('btnPrev').onclick=()=>{if(tPage>1)loadTickets(tPage-1);};
 document.getElementById('btnNext').onclick=()=>{if(tPage<tTotal)loadTickets(tPage+1);};
 
-// ── NAV BINDINGS ──────────────────────────────────────────────────────────────
 document.getElementById('navEvents').onclick=loadEvents;
 document.getElementById('navTickets').onclick=()=>loadTickets(1);
 document.getElementById('heroBrowse').onclick=loadEvents;
 document.getElementById('heroTickets').onclick=()=>loadTickets(1);
+setAuthUi();
 </script>
 </body>
 </html>
@@ -763,7 +1071,6 @@ document.getElementById('heroTickets').onclick=()=>loadTickets(1);
     return Results.Content(html, "text/html; charset=utf-8", Encoding.UTF8);
 });
 
-// ── GENEL YÖNLENDİRME (Auth + Routing) ──────────────────────────────────────
 app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory clientFactory, IMongoClient mongoClient) =>
 {
     var lowerPath = path?.ToLower() ?? "";
@@ -788,7 +1095,7 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
     {
         try
         {
-            var db = mongoClient.GetDatabase("AuthServiceDb");
+            var db = mongoClient.GetDatabase("DispatcherDb");
             var authCollection = db.GetCollection<BsonDocument>("ApiKeys");
             var filter = Builders<BsonDocument>.Filter.Eq("key", apiKey.ToString());
             var authRecord = await authCollection.Find(filter).FirstOrDefaultAsync();
@@ -817,7 +1124,6 @@ app.Map("{*path}", async (HttpContext context, string path, IHttpClientFactory c
 
 app.Run();
 
-// ── YARDIMCI METODLAR ─────────────────────────────────────────────────────────
 static async Task<IResult> ForwardRequest(HttpContext context, string targetUrl, IHttpClientFactory clientFactory)
 {
     try
@@ -830,6 +1136,11 @@ static async Task<IResult> ForwardRequest(HttpContext context, string targetUrl,
             : targetUrl;
 
         var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), fullUrl);
+
+        if (context.Request.Headers.TryGetValue("Authorization", out var authHdr))
+            request.Headers.TryAddWithoutValidation("Authorization", authHdr.ToString());
+        if (context.Request.Headers.TryGetValue("X-Api-Key", out var apiHdr))
+            request.Headers.TryAddWithoutValidation("X-Api-Key", apiHdr.ToString());
 
         if (context.Request.Method != "GET" && context.Request.Method != "DELETE")
         {

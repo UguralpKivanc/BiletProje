@@ -11,6 +11,8 @@ namespace TicketService.Models
         public string? Id { get; set; }
 
         public string EventName { get; set; } = string.Empty;
+        /// <summary>Hesap sahibi (JWT kullanıcı adı). Boşsa eski/API-key kaydı.</summary>
+        public string? OwnerUsername { get; set; }
         public string CustomerName { get; set; } = string.Empty;
         public string Seat { get; set; } = string.Empty;
         public string Status { get; set; } = "Active";

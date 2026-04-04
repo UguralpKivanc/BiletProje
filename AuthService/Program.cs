@@ -23,12 +23,13 @@ app.UseHttpMetrics();
 app.MapMetrics();
 app.MapControllers();
 
-// Seed Data: Varsayılan admin kullanıcısı
+// Seed Data: Varsayılan admin kullanıcısı + API key
 try
 {
     var client = app.Services.GetRequiredService<IMongoClient>();
     var db = client.GetDatabase("AuthServiceDb");
     var usersCollection = db.GetCollection<BsonDocument>("Users");
+ 
 
     if (usersCollection.CountDocuments(new BsonDocument()) == 0)
     {
@@ -40,8 +41,10 @@ try
             { "Role", "admin" }
         };
         usersCollection.InsertOne(admin);
-        Console.WriteLine("--> AĞAM: Varsayılan admin kullanıcısı oluşturuldu! (admin / Bilet2026)");
+        Console.WriteLine("Varsayılan admin kullanıcısı oluşturuldu! (admin / Bilet2026)");
     }
+
+ 
 }
 catch (Exception ex)
 {

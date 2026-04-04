@@ -22,7 +22,18 @@ namespace eventservice.Controllers
             var events = await _repository.GetAllAsync();
 
             if (!events.Any())
-                return Ok(new { message = "Bağlantı OK ama 'Events' içi boş görünüyor ağam!" });
+            {
+                return Ok(new
+                {
+                    message = "Bağlantı başarılı; henüz etkinlik kaydı yok.",
+                    data = Array.Empty<object>(),
+                    links = new[]
+                    {
+                        new HateoasLink("self", "/api/events", "GET"),
+                        new HateoasLink("create", "/api/events", "POST")
+                    }
+                });
+            }
 
             var items = events.Select(e => new
             {
@@ -98,7 +109,6 @@ namespace eventservice.Controllers
             return NoContent();
         }
 
-        // ── Yardımcı ─────────────────────────────────────────────────────────────
         private static HateoasLink[] BuildLinks(string id) =>
         [
             new HateoasLink("self",       $"/api/events/{id}", "GET"),

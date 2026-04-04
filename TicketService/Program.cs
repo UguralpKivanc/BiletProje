@@ -1,3 +1,7 @@
+using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Prometheus;
@@ -10,13 +14,36 @@ builder.WebHost.UseUrls("http://*:5168");
 var mongoConn = Environment.GetEnvironmentVariable("ConnectionStrings__MongoDb")
                 ?? "mongodb://mongodb:27017";
 
+var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
+                ?? "BiletSistemi-JWT-Gizli-Anahtar-2026-SuperSecret!";
+
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoConn));
 builder.Services.AddScoped<ITicketRepository, TicketRepository>();
 builder.Services.AddControllers();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateIssuer = true,
+            ValidIssuer = "BiletSistemi",
+            ValidateAudience = true,
+            ValidAudience = "BiletSistemi",
+            ClockSkew = TimeSpan.Zero,
+            NameClaimType = ClaimTypes.Name,
+            RoleClaimType = ClaimTypes.Role
+        };
+    });
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 app.UseDeveloperExceptionPage();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseHttpMetrics();   // Prometheus HTTP metrikleri
 app.MapMetrics();       // /metrics endpoint'i
 
@@ -41,7 +68,7 @@ try
             { "PurchaseDate", DateTime.UtcNow }
         };
         collection.InsertOne(sampleTicket);
-        Console.WriteLine("--> AĞAM: Örnek Bilet Verisi Veritabanına İşlendi!");
+        Console.WriteLine("--> Örnek bilet verisi veritabanına eklendi.");
     }
 }
 catch (Exception ex)
